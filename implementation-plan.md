@@ -90,7 +90,7 @@
 | UI 组件 | **uiverse-io 精选纯 CSS 组件 + 项目 CSS 变量深色主题**（按用户偏好，不整库引入） | 零运行时依赖，深色主题可控 | MIT |
 | 架构参考 | **qq3163450460/hot_list**（热榜聚合+AI 分析，FastAPI+异步） | 同构产品，参考其模块划分 | 开源 |
 
-> 环境差距（2026-10-02 实测）：Node v22.23.2 ✓ / npm 10.9.8 ✓ / **Rust 工具链 ✗ 未安装**（Tauri 硬依赖，P0 前必须安装 rustup）。
+> 环境状态（2026-10-02 已装齐）：Node v22.23.2 ✓ / npm 10.9.8 ✓ / **Rust 1.99.0（cargo）✓ / VS Build Tools 2022（MSVC VC.Tools）✓ / WebView2 ✓**，rustc+MSVC 链接冒烟测试通过，P0 无环境阻塞。
 
 
 

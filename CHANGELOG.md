@@ -10,3 +10,4 @@
 - 纳入实施计划文档 `implementation-plan.md`（@7ec57b0）
 - 新增 `BUGS.md`（记录 BUG-001~004）与 `AGENTS.md` §7 Bug 记录规则（@329a280）
 - 实施计划补充开源选型表与环境差距（Rust 工具链缺失）（@f5b8607）
+- 环境工具链装齐（Rust 1.99.0 + MSVC Build Tools），BUG-005 提权修复记录
