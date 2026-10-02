@@ -68,7 +68,7 @@
 ## BUG-006：create-tauri-app --force 静默清空目标目录全部文件（即使后续报错退出）
 
 - **日期**：2026-10-02
-- **关联 commit**：待初始化 commit 回填（@hash）
+- **关联 commit**：`5c61e2d`（工程初始化，事故发生于脚手架阶段）
 - **所属模块**：工程脚手架/工具链
 - **症状**：在已有 git 仓库根目录运行 `create-tauri-app . --force --yes ...`，命令最终以 `os error 32`（文件被占用）失败退出，但**仓库根目录被清空**：AGENTS.md、.gitignore、CHANGELOG.md、BUGS.md、.env.example、implementation-plan.md、ui-mockup/Goodidea-UI设计稿.html 全部消失；`git status` 显示大面积 `D`（deleted）。
 - **根因**：`create-tauri-app 4.x` 的 `--force` 语义 = "目标目录非空时**先清空目录内容再写模板**"。该清理动作在报错（本项目环境里 NAPI-RS 原生模块加载/执行被占用，os error 32）之前就已执行；此外本环境 `create-tauri-app` 的二进制始终无法完成 scaffold（--version 正常、scaffold 必报 32），工具在本机不可用。
