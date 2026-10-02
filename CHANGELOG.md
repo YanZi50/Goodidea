@@ -6,5 +6,5 @@
 ## [Unreleased]
 
 ### Added
-- 初始化仓库：项目级协作规则 `AGENTS.md`、`.gitignore`、`.env.example`、`CHANGELOG.md`
-- 纳入实施计划文档 `implementation-plan.md`
+- 初始化仓库：项目级协作规则 `AGENTS.md`、`.gitignore`、`.env.example`、`CHANGELOG.md`（@7ec57b0）
+- 纳入实施计划文档 `implementation-plan.md`（@7ec57b0）
