@@ -37,4 +37,4 @@ BUGS.md          问题档案（先记录、再修复）
 
 ## 状态
 
-P0（骨架）进行中：工程初始化已就绪，五面板 UI 骨架与 SQLite 接入为当前阶段。详见 `implementation-plan.md`。
+P0（骨架）进行中：工程初始化与五面板深色 UI 骨架已就绪（全示例数据，用于确认视觉方向），SQLite 接入为当前阶段。详见 `implementation-plan.md`。
