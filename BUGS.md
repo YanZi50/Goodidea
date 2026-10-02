@@ -56,7 +56,7 @@
 ## BUG-005：VS 安装器静默 modify 因非提权返回 5007，且退出码被分发器掩盖
 
 - **日期**：2026-10-02
-- **关联 commit**：待定（环境安装阶段）
+- **关联 commit**：`1e5bc69`（环境就绪记录）
 - **所属模块**：开发环境/VS Build Tools 安装
 - **症状**：`vs_installer.exe modify --quiet --add Microsoft.VisualStudio.Workload.VCTools ...` 返回 0 但组件未安装（link.exe 缺失、vswhere 查不到 VC.Tools）。
 - **根因**：① `vs_installer.exe` 是分发器，立即返回 0，真实安装发生在子进程 `setup.exe`，其退出码被掩盖；② 真实日志显示 `Commands with --quiet or --passive should be run elevated from the beginning`（退出码 5007）——非提权进程执行静默修改被 VS 安装器拒绝；③ 附带坑：`--log` 不是 `setup.exe modify` 的合法参数（引导器专属），会报"选项'log'未知"（退出码 87）。
