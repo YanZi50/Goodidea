@@ -75,7 +75,24 @@
 
 ---
 
-## 三、数据模型（SQLite 草案）
+## 二·补、开源选型（2026-10-02 扫描结论，均已核验许可证/活跃度）
+
+| 模块 | 选定开源方案 | 理由 | 许可证/状态 |
+|---|---|---|---|
+| 热榜聚合源（备用/抖音初始适配） | **imsyy/DailyHotApi** | 聚合微博/知乎/抖音/B站等，JSON+RSS 双模式，Docker/Vercel 部署，自带 60min 缓存 | MIT，4.1k★，活跃 |
+| 抖音合规主源 | **抖音开放平台 hot_video 榜单接口** | 官方接口，需申请权限（限时免费）；合规性远优于逆向 | 官方 |
+| 工程脚手架 | **create-tauri-app（vue-ts 官方模板）**，备选 awesome-tauri 的 `tauri-vue-template`（含 Vitest+ESLint+GitHub Actions） | 官方维护、Vitest 契合 AGENTS.md 测试规则 | 官方/MIT |
+| AI 统一接入层 | **Vercel AI SDK**（`ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` + `@ai-sdk/google`；豆包走 OpenAI 兼容 baseURL：火山方舟 `/api/v3`） | 统一 `generateText/streamText` 接口，多厂商原生包由社区开源维护，免自研 adapter 层 | MIT |
+| Token 预估 | **gpt-tokenizer**（纯 JS，`countTokens`/`encodeChat`） | 无需 WASM；注意：**仅用于预估**，精确计费以各 API 返回的 `usage` 字段为准（各家 tokenizer 不同） | MIT，活跃 |
+| 存储 | **tauri-plugin-sql**（sqlx + sqlite feature） | 官方插件，P1 核心表 | 官方 |
+| 向量检索（P3） | **tauri-plugin-velesdb**（官方生态，混合 BM25+向量，离线优先）备选 sqlite-vec | 语义搜索素材库/爆款库 | 官方/社区 |
+| 文档解析 | **mammoth.js**（.docx）+ marked（.md）+ 原生（.txt） | 成熟稳定 | MIT |
+| UI 组件 | **uiverse-io 精选纯 CSS 组件 + 项目 CSS 变量深色主题**（按用户偏好，不整库引入） | 零运行时依赖，深色主题可控 | MIT |
+| 架构参考 | **qq3163450460/hot_list**（热榜聚合+AI 分析，FastAPI+异步） | 同构产品，参考其模块划分 | 开源 |
+
+> 环境差距（2026-10-02 实测）：Node v22.23.2 ✓ / npm 10.9.8 ✓ / **Rust 工具链 ✗ 未安装**（Tauri 硬依赖，P0 前必须安装 rustup）。
+
+
 
 ```sql
 documents(id, filename, file_type, file_hash UNIQUE, size, tags, created_at);
