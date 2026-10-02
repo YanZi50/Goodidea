@@ -8,3 +8,5 @@
 ### Added
 - 初始化仓库：项目级协作规则 `AGENTS.md`、`.gitignore`、`.env.example`、`CHANGELOG.md`（@7ec57b0）
 - 纳入实施计划文档 `implementation-plan.md`（@7ec57b0）
+- 新增 `BUGS.md`（记录 BUG-001~004）与 `AGENTS.md` §7 Bug 记录规则
+- 实施计划补充开源选型表与环境差距（Rust 工具链缺失）
