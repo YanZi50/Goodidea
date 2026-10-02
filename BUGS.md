@@ -65,6 +65,18 @@
 
 ---
 
+## BUG-006：create-tauri-app --force 静默清空目标目录全部文件（即使后续报错退出）
+
+- **日期**：2026-10-02
+- **关联 commit**：待初始化 commit 回填（@hash）
+- **所属模块**：工程脚手架/工具链
+- **症状**：在已有 git 仓库根目录运行 `create-tauri-app . --force --yes ...`，命令最终以 `os error 32`（文件被占用）失败退出，但**仓库根目录被清空**：AGENTS.md、.gitignore、CHANGELOG.md、BUGS.md、.env.example、implementation-plan.md、ui-mockup/Goodidea-UI设计稿.html 全部消失；`git status` 显示大面积 `D`（deleted）。
+- **根因**：`create-tauri-app 4.x` 的 `--force` 语义 = "目标目录非空时**先清空目录内容再写模板**"。该清理动作在报错（本项目环境里 NAPI-RS 原生模块加载/执行被占用，os error 32）之前就已执行；此外本环境 `create-tauri-app` 的二进制始终无法完成 scaffold（--version 正常、scaffold 必报 32），工具在本机不可用。
+- **解决**：`git checkout -- .` 从 HEAD 恢复全部被删文件（git 历史完好无损）；脚手架改用"从官方仓库 `templates/` 目录手动渲染模板"通道完成（占位符 `{% %}` 替换 + `%(v2)%` 文件名裁剪 + 二进制 icons 直接复制）。
+- **预防**：① **严禁**在含未提交/自有文件的目录对脚手架工具使用 `--force`；② 工程初始化前先确认仓库干净并做好全量备份；③ create-tauri-app 类工具异常退出（尤其 os error 32）不代表"没有副作用"，事后必须 `git status` 核查；④ 本机脚手架通道固定为"模板仓库手动渲染"。
+
+---
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。
