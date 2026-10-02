@@ -27,3 +27,6 @@ secrets/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ===== UI 设计稿自检截图（shot.py 生成，非交付产物）=====
+ui-mockup/_shots/

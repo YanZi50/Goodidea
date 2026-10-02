@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goodidea 界面设计稿</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230E1116'/%3E%3Cpath d='M7 8.5h10M7 12h6M7 15.5h8' stroke='%23E8B36A' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0E1116; --surface:#151A21; --surface-2:#1C232D; --surface-3:#222B37;
+  --border:#29313D; --border-strong:#3A4554;
+  --text:#E8ECF2; --text-muted:#97A2B3; --text-faint:#647084;
+  --accent:#E8B36A; --accent-soft:rgba(232,179,106,.13);
+  --green:#6FD3A4; --green-soft:rgba(111,211,164,.13);
+  --blue:#7FB5FF; --blue-soft:rgba(127,181,255,.13);
+  --red:#E5736E; --red-soft:rgba(229,115,110,.13);
+  --radius:10px; --radius-sm:7px;
+  --font:"Microsoft YaHei","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+  --mono:"Cascadia Code","Consolas",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;color:inherit}
+::selection{background:rgba(232,179,106,.28)}
+/* ===== 应用壳 ===== */
+.app{display:flex;height:100vh;overflow:hidden}
+/* 侧栏 */
+.sidebar{width:224px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:10px;padding:18px 18px 14px}
+.brand-logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#E8B36A,#C98A4B);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-name{font-size:16px;font-weight:700;letter-spacing:.3px;line-height:1.35}
+.brand-sub{font-size:11px;color:var(--text-faint);margin-top:2px;line-height:1.3}
+.nav{flex:1;padding:10px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:var(--radius-sm);color:var(--text-muted);font-size:13.5px;transition:background .16s,color .16s;text-align:left;width:100%}
+.nav-item svg{width:17px;height:17px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nav-item:hover{background:var(--surface-2);color:var(--text)}
+.nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav-badge{margin-left:auto;font-size:11px;background:var(--surface-3);color:var(--text-muted);padding:1px 8px;border-radius:20px}
+.nav-sep{height:1px;background:var(--border);margin:8px 4px}
+.sidebar-foot{padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:6px}
+.foot-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:var(--radius-sm);color:var(--text-faint);font-size:12.5px;transition:color .16s,background .16s}
+.foot-btn:hover{color:var(--text);background:var(--surface-2)}
+.foot-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+/* 主区 */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{height:56px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-title{font-size:16px;font-weight:700}
+.page-desc{font-size:12px;color:var(--text-faint)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.select{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s}
+.select:hover,.select:focus{border-color:var(--border-strong)}
+.usage-badge{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 11px;font-size:12.5px;color:var(--text-muted)}
+.usage-badge b{color:var(--accent);font-weight:700}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+/* 内容 */
+.content{flex:1;overflow-y:auto;padding:20px}
+.view{display:none;animation:fade .22s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* ===== 通用组件 ===== */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 15px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;transition:background .15s,transform .1s,opacity .15s;border:1px solid transparent}
+.btn:active{transform:scale(.98)}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.btn-primary{background:var(--accent);color:#241A08}
+.btn-primary:hover{background:#F0C07F}
+.btn-ghost{background:transparent;border-color:var(--border);color:var(--text-muted)}
+.btn-ghost:hover{color:var(--text);border-color:var(--border-strong);background:var(--surface-2)}
+.btn-soft{background:var(--accent-soft);color:var(--accent)}
+.btn-soft:hover{background:rgba(232,179,106,.22)}
+.btn-green{background:var(--green-soft);color:var(--green)}
+.btn-green:hover{background:rgba(111,211,164,.22)}
+.btn-danger-ghost{background:transparent;border-color:var(--border);color:var(--red)}
+.btn-danger-ghost:hover{background:var(--red-soft);border-color:transparent}
+.btn-sm{padding:5px 11px;font-size:12.5px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.card-title{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.card-title .hint{margin-left:auto;font-size:11.5px;color:var(--text-faint);font-weight:400}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:11.5px;background:var(--surface-3);color:var(--text-muted);border:1px solid var(--border)}
+.tag.gold{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.tag.green{background:var(--green-soft);color:var(--green);border-color:transparent}
+.tag.blue{background:var(--blue-soft);color:var(--blue);border-color:transparent}
+.tag.red{background:var(--red-soft);color:var(--red);border-color:transparent}
+.input{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-size:13.5px;outline:none;transition:border-color .15s;width:100%}
+.input:hover,.input:focus{border-color:var(--border-strong)}
+.textarea{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:13.5px;outline:none;resize:vertical;width:100%;min-height:120px;transition:border-color .15s;line-height:1.6}
+.textarea:hover,.textarea:focus{border-color:var(--border-strong)}
+.label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px}
+.row{display:flex;gap:12px;align-items:center}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.demo-note{font-size:11.5px;color:var(--text-faint);border:1px dashed var(--border-strong);border-radius:var(--radius-sm);padding:4px 10px;display:inline-block;margin-bottom:12px}
+/* toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface-3);border:1px solid var(--border-strong);color:var(--text);padding:9px 18px;border-radius:8px;font-size:13px;opacity:0;transition:all .28s cubic-bezier(.2,.8,.3,1);z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* ===== 文档库视图 ===== */
+.dropzone{border:1.5px dashed var(--border-strong);border-radius:var(--radius);padding:26px;text-align:center;color:var(--text-muted);transition:border-color .18s,background .18s;cursor:pointer}
+.dropzone:hover,.dropzone.drag{border-color:var(--accent);background:var(--accent-soft)}
+.dropzone svg{width:30px;height:30px;stroke:var(--accent);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;margin-bottom:8px}
+.dropzone b{color:var(--text);font-weight:600}
+.dropzone .fmt{margin-top:8px;font-size:12px;color:var(--text-faint)}
+.toolbar{display:flex;gap:10px;align-items:center;margin:16px 0 12px;flex-wrap:wrap}
+.toolbar .search{flex:1;min-width:180px;position:relative}
+.toolbar .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:14px;height:14px;stroke:var(--text-faint);fill:none;stroke-width:1.8;stroke-linecap:round}
+.toolbar .search .input{padding-left:33px}
+table.tbl{width:100%;border-collapse:collapse;table-layout:fixed}
+table.tbl colgroup col:nth-child(1){width:34%}
+table.tbl colgroup col:nth-child(2){width:11%}
+table.tbl colgroup col:nth-child(3){width:10%}
+table.tbl colgroup col:nth-child(4){width:16%}
+table.tbl colgroup col:nth-child(5){width:17%}
+table.tbl colgroup col:nth-child(6){width:12%}
+table.tbl th{font-size:12px;color:var(--text-faint);font-weight:600;text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.tbl td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+table.tbl tbody tr{transition:background .13s}
+table.tbl tbody tr:hover{background:var(--surface-2)}
+.fname{display:flex;align-items:center;gap:9px;font-weight:600;overflow:hidden}
+.fname svg{width:16px;height:16px;flex-shrink:0;stroke:var(--blue);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.fname .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fmeta{font-size:11.5px;color:var(--text-faint);margin-top:1px}
+.row-actions{display:flex;gap:4px;justify-content:flex-end;opacity:0;transition:opacity .15s}
+table.tbl tr:hover .row-actions{opacity:1}
+.icon-btn{width:27px;height:27px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-faint);transition:background .14s,color .14s}
+.icon-btn:hover{background:var(--surface-3);color:var(--text)}
+.icon-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.stat-line{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-muted);padding:5px 0}
+.stat-line b{color:var(--text)}
+/* ===== 分析视图 ===== */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.kpi .k{font-size:12px;color:var(--text-faint);margin-bottom:4px}
+.kpi .v{font-size:22px;font-weight:700;letter-spacing:.2px}
+.kpi .v small{font-size:12px;color:var(--text-faint);font-weight:400;margin-left:3px}
+.kpi .d{font-size:11.5px;color:var(--green);margin-top:3px}
+.summary-block{background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding:14px 16px;margin-bottom:12px}
+.summary-block .sb-t{font-size:12px;color:var(--accent);font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.summary-block p{font-size:13px;color:var(--text-muted);line-height:1.7}
+.issue{display:flex;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);margin-bottom:8px;align-items:flex-start}
+.issue .dot{width:7px;height:7px;border-radius:50%;background:var(--red);margin-top:6px;flex-shrink:0;box-shadow:0 0 0 3px var(--red-soft)}
+.issue .dot.warn{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.issue .body{flex:1;min-width:0}
+.issue .body .t{font-weight:600;font-size:13.5px}
+.issue .body .s{font-size:12.5px;color:var(--text-muted);margin-top:2px}
+.issue .ref{font-size:11px;color:var(--text-faint);margin-top:5px;display:flex;gap:6px;flex-wrap:wrap}
+.cluster{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+/* ===== 生成工作台 ===== */
+.studio{display:grid;grid-template-columns:minmax(300px,2fr) minmax(320px,3fr);gap:14px;align-items:start}
+.panel-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.panel-head .ph-t{font-weight:700;font-size:14px}
+.panel-head .ph-h{margin-left:auto;font-size:11.5px;color:var(--text-faint)}
+.field{margin-bottom:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:6px 13px;border-radius:20px;font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;transition:all .14s}
+.chip:hover{border-color:var(--border-strong);color:var(--text)}
+.chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.out-area{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;min-height:340px;position:relative}
+.out-area .cursor{display:inline-block;width:2px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.out-line{margin-bottom:10px;font-size:13.5px;color:var(--text-muted);line-height:1.7}
+.out-line.strong{color:var(--text);font-weight:600}
+.out-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.costbar{margin-top:12px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-faint)}
+.costbar .bar{flex:1;height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden}
+.costbar .bar i{display:block;height:100%;width:42%;border-radius:3px;background:var(--accent)}
+/* ===== 热点视图 ===== */
+.hot-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.hot-tab{padding:6px 14px;border-radius:20px;font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;transition:all .14s}
+.hot-tab:hover{color:var(--text)}
+.hot-tab.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.hot-item{display:flex;gap:13px;align-items:center;padding:11px 13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);margin-bottom:8px;transition:background .13s}
+.hot-item:hover{background:var(--surface-2)}
+.hot-rank{width:26px;height:26px;border-radius:7px;background:var(--surface-3);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;flex-shrink:0}
+.hot-rank.top{background:var(--accent-soft);color:var(--accent)}
+.hot-body{flex:1;min-width:0}
+.hot-body .t{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hot-body .s{font-size:11.5px;color:var(--text-faint);margin-top:2px;display:flex;gap:10px}
+.hot-body .s .up{color:var(--green)}
+.hot-body .s .down{color:var(--red)}
+.hot-tags{display:flex;gap:6px;flex-shrink:0}
+.hot-val{text-align:right;flex-shrink:0;min-width:52px}
+.hot-val .hv{font-size:13px;font-weight:700}
+.hot-val .hl{font-size:10.5px;color:var(--text-faint)}
+.manual-input{display:flex;gap:8px;margin-top:14px}
+.manual-input .input{flex:1}
+/* ===== 消耗视图 ===== */
+.usage-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.bars{display:flex;align-items:flex-end;gap:10px;height:150px;padding:10px 4px 0;border-bottom:1px solid var(--border)}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.bar-col .fill{width:70%;max-width:44px;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,#F0C07F,#C98A4B);position:relative;transition:height .3s}
+.bar-col .fill.green{background:linear-gradient(180deg,#8FE0B8,#4FAE82)}
+.bar-col .lbl{font-size:11px;color:var(--text-faint)}
+.bar-col .val{font-size:10.5px;color:var(--text-muted)}
+.usage-table{margin-top:16px}
+.usage-table .row-line{display:flex;gap:10px;align-items:center;padding:9px 4px;border-bottom:1px solid var(--border);font-size:13px}
+.usage-table .row-line .m{flex:1;font-weight:600}
+.usage-table .row-line .p{width:110px;text-align:right;color:var(--text-muted)}
+.usage-table .row-line .amt{width:90px;text-align:right;font-weight:700}
+.usage-table .row-line .tag{width:64px;justify-content:center}
+/* ===== 响应式 ===== */
+@media (max-width:1100px){
+  .g4{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(2,1fr)}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .usage-sum{grid-template-columns:repeat(2,1fr)}
+  .studio{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .sidebar{width:58px}
+  .brand-name,.brand-sub,.nav-item span,.nav-badge,.sidebar-foot .foot-btn span{display:none}
+  .nav{padding:8px 7px}
+  .nav-item{justify-content:center;padding:10px 0;min-height:44px;min-width:44px}
+  .input,.textarea,.select{font-size:16px}
+  .nav-sep{margin:6px 0}
+  .foot-btn{padding:10px 0}
+  .g2,.g3,.g4,.kpis,.usage-sum{grid-template-columns:1fr}
+  .topbar{padding:0 14px}
+  .content{padding:14px}
+  .page-desc{display:none}
+  table.tbl colgroup col:nth-child(4),table.tbl colgroup col:nth-child(5){display:none}
+  table.tbl th:nth-child(4),table.tbl th:nth-child(5),table.tbl td:nth-child(4),table.tbl td:nth-child(5){display:none}
+  .hot-tags{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ===== 侧栏 ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#241A08" stroke-width="2.2" stroke-linecap="round"><path d="M7 8.5h10M7 12h6M7 15.5h8"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">Goodidea</div>
+        <div class="brand-sub">知识库 · AI 工作台</div>
+      </div>
+    </div>
+    <nav class="nav" id="nav">
+      <a class="nav-item active" data-view="library" href="#library">
+        <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>文档库</span><span class="nav-badge" id="navCount">0</span>
+      </a>
+      <a class="nav-item" data-view="analysis" href="#analysis">
+        <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-6 3 4 5-7"/></svg>
+        <span>智能分析</span>
+      </a>
+      <a class="nav-item" data-view="studio" href="#studio">
+        <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        <span>生成工作台</span>
+      </a>
+      <a class="nav-item" data-view="hotspot" href="#hotspot">
+        <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span>实时热点</span><span class="nav-badge">抖音</span>
+      </a>
+      <a class="nav-item" data-view="usage" href="#usage">
+        <svg viewBox="0 0 24 24"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>
+        <span>消耗统计</span>
+      </a>
+      <div class="nav-sep"></div>
+      <a class="nav-item" data-view="settings" href="#settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>设置</span>
+      </a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="foot-btn" data-toast="设置与帮助即将开放（设计稿演示）"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg><span>帮助</span></button>
+      <button class="foot-btn" data-toast="导出知识库备份即将开放（设计稿演示）"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg><span>导出</span></button>
+    </div>
+  </aside>
+
+  <!-- ===== 主区 ===== -->
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <div class="page-title" id="pageTitle">文档库</div>
+        <div class="page-desc" id="pageDesc">所有喂给 Goodidea 的材料都沉淀在这里</div>
+      </div>
+      <div class="topbar-right">
+        <select class="select" id="modelSelect">
+          <option>豆包 · doubao-seed-2.0-pro</option>
+          <option>OpenAI · gpt-5</option>
+          <option>Anthropic · claude-sonnet-4</option>
+          <option>本地 · Ollama qwen3</option>
+        </select>
+        <div class="usage-badge"><span class="status-dot"></span>今日消耗 <b id="todayCost">¥0.86</b></div>
+      </div>
+    </header>
+    <div class="content">
+      <span class="demo-note">设计稿 · 全部为示例数据，仅用于确认视觉方向</span>
+
+      <!-- ===== 视图：文档库 ===== -->
+      <section class="view active" data-view="library">
+        <div class="dropzone" id="dropzone" data-toast="上传解析将在 P1 接入（设计稿演示）">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+          <div>拖拽文件到这里，或 <b>点击选择文件</b></div>
+          <div class="fmt">支持 .txt · .md · .docx（一期）｜.pdf · 图片 OCR（二期）</div>
+        </div>
+        <div class="toolbar">
+          <div class="search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input class="input" id="docSearch" placeholder="搜索文件名、标签…">
+          </div>
+          <button class="btn btn-ghost" data-toast="粘贴文本入库即将开放（设计稿演示）">粘贴文本</button>
+          <button class="btn btn-primary" data-toast="批量导入将在 P1 接入（设计稿演示）">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>批量导入
+          </button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="tbl">
+            <colgroup><col><col><col><col><col><col></colgroup>
+            <thead><tr><th>文件名</th><th>类型</th><th>大小</th><th>入库时间</th><th>标签</th><th style="text-align:right">操作</th></tr></thead>
+            <tbody id="docRows"></tbody>
+          </table>
+        </div>
+        <div class="libstats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px">
+          <div class="card"><div class="card-title">文档统计</div>
+            <div class="stat-line"><span>文档总数</span><b id="statDocs">0</b></div>
+            <div class="stat-line"><span>总字数</span><b id="statChars">0</b></div>
+            <div class="stat-line"><span>分块数</span><b id="statChunks">0</b></div>
+          </div>
+          <div class="card"><div class="card-title">最近入库</div>
+            <div id="recentList" style="font-size:12.5px;color:var(--text-muted)"></div>
+          </div>
+          <div class="card"><div class="card-title">素材库（P3）<span class="hint">示例</span></div>
+            <div style="font-size:12.5px;color:var(--text-muted)">爆款拆解 · 个人风格 · 产品资料三库，后续版本接入向量检索</div>
+            <div class="cluster"><span class="tag gold">爆款拆解</span><span class="tag green">个人风格</span><span class="tag blue">产品资料</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 视图：智能分析 ===== -->
+      <section class="view" data-view="analysis">
+        <div class="kpis">
+          <div class="kpi"><div class="k">已分析文档</div><div class="v">12<small>篇</small></div><div class="d">较上次 +3</div></div>
+          <div class="kpi"><div class="k">覆盖文本</div><div class="v">8.4<small>万字</small></div><div class="d">100% 分块</div></div>
+          <div class="kpi"><div class="k">发现问题</div><div class="v">7<small>项</small></div><div class="d" style="color:var(--red)">2 项待处理</div></div>
+          <div class="kpi"><div class="k">累计分析消耗</div><div class="v">¥3.2</div><div class="d">增量模式节省 61%</div></div>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-title">全库浓缩 <span class="hint">示例结果 · P1 接入真实分析</span></div>
+          <div class="summary-block">
+            <div class="sb-t">核心要点（3 条）</div>
+            <p>① 素材库覆盖名表、包袋、饰品三大品类，价格区间 1 万–300 万；② 爆款脚本共性：黄金三秒悬念 + 回收价对比 + 信任背书；③ 个人风格偏向强节奏口播、短句高频、结尾行动号召。</p>
+          </div>
+          <div class="summary-block" style="border-left-color:var(--red)">
+            <div class="sb-t" style="color:var(--red)">指出问题（7 项，重点 2 项）</div>
+          </div>
+          <div class="issue"><div class="dot"></div><div class="body">
+            <div class="t">脚本结构同质化：12 篇中 9 篇使用「先报价后验货」开场</div>
+            <div class="s">黄金三秒的悬念密度不足，易被平台判定为广告流，影响完播率。</div>
+            <div class="ref"><span class="tag">脚本-0715</span><span class="tag">脚本-0722</span><span class="tag red">高优先</span></div>
+          </div></div>
+          <div class="issue"><div class="dot warn"></div><div class="body">
+            <div class="t">价格数据口径不一致：部分脚本写「9 折回收」，部分写「高价回收」无锚点</div>
+            <div class="s">建议统一为可核验的对比话术（如「市场行情 + 当日回收价」），增强可信度。</div>
+            <div class="ref"><span class="tag">素材-价格表</span><span class="tag gold">中优先</span></div>
+          </div></div>
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+            <button class="btn btn-primary" id="analyzeBtn"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-6 3 4 5-7"/></svg>重新分析全库</button>
+            <button class="btn btn-ghost" data-toast="增量分析将在 P3 接入（设计稿演示）">仅分析新增</button>
+            <button class="btn btn-ghost" data-toast="分析报告导出即将开放（设计稿演示）">导出报告</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">主题聚类 <span class="hint">示例</span></div>
+          <div class="cluster">
+            <span class="tag gold">口播带货（7）</span><span class="tag green">剧情种草（3）</span><span class="tag blue">行情科普（2）</span><span class="tag">素材归档（4）</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 视图：生成工作台 ===== -->
+      <section class="view" data-view="studio">
+        <div class="studio">
+          <div class="card">
+            <div class="panel-head"><span class="ph-t">生成配置</span><span class="ph-h">示例 · P1 接入真实生成</span></div>
+            <div class="field">
+              <label class="label">Skill 模板</label>
+              <div class="chips">
+                <button class="chip on">口播带货</button>
+                <button class="chip">剧情短视频</button>
+                <button class="chip">行情科普</button>
+                <button class="chip">小红书种草</button>
+                <button class="chip">+ 自定义 Skill</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">关联素材</label>
+              <div class="chips">
+                <button class="chip on">价格表 v3</button>
+                <button class="chip">名表回收话术</button>
+                <button class="chip">包袋验货要点</button>
+                <button class="chip on">风格库·强节奏口播</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">热点参考（可选）</label>
+              <div class="chips">
+                <button class="chip"># 名表回收新趋势</button>
+                <button class="chip"># 二手奢侈品行情</button>
+                <button class="chip">不使用热点</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">需求描述</label>
+              <textarea class="textarea" placeholder="例：结合价格表与风格库，写一条 60 秒口播带货脚本，钩子用行情反差，结尾引导私信估价……">结合价格表 v3 与强节奏口播风格，写一条 60 秒口播脚本：黄金三秒用行情反差做钩子，中段讲名表回收流程与打款速度，结尾引导私信估价。</textarea>
+            </div>
+            <div class="row" style="justify-content:space-between">
+              <div style="font-size:12px;color:var(--text-faint)">预计消耗 ≈ ¥0.12 · 约 2.1k tokens</div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-ghost" data-toast="保存草稿即将开放（设计稿演示）">存草稿</button>
+                <button class="btn btn-primary" id="genBtn">
+                  <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>开始生成
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="panel-head"><span class="ph-t">输出</span><span class="ph-h">流式渲染 · 实时消耗</span></div>
+            <div class="out-area" id="outArea">
+              <div class="out-line strong">【0–3s · 钩子】</div>
+              <div class="out-line">昨天还有人花 180 万买一块表，今天它就躺在我们柜台上——不是它不值，是行情变了。</div>
+              <div class="out-line strong">【3–18s · 卖点】</div>
+              <div class="out-line">我们做名表回收：当天验货、当天打款，报价直接对标当日行情，不做"先压价再返点"那套。</div>
+              <div class="out-line strong">【18–42s · 流程与信任】</div>
+              <div class="out-line">全程录屏留痕，支持到店或顺丰保价寄送，检测仪器现场出报告，每一分钱都说得清楚。</div>
+              <div class="out-line strong">【42–60s · 行动号召】</div>
+              <div class="out-line">想了解你手里这块表现在值多少？评论区扣"估价"，或者私信我，免费出价，不合适随时走。</div>
+              <div class="cursor"></div>
+              <div class="out-meta">
+                <span class="tag gold">口播带货</span><span class="tag green">60s</span><span class="tag blue">风格·强节奏</span>
+                <span style="margin-left:auto;font-size:11.5px;color:var(--text-faint)">生成于示例数据 · 12s 前</span>
+              </div>
+            </div>
+            <div class="costbar"><span>本次消耗</span><div class="bar"><i></i></div><span>¥0.11 / 2.0k tokens</span></div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button class="btn btn-green btn-sm" data-toast="复制成功（设计稿演示）">复制全文</button>
+              <button class="btn btn-ghost btn-sm" data-toast="导出分镜表将在 P1 接入（设计稿演示）">导出分镜表</button>
+              <button class="btn btn-ghost btn-sm" data-toast="重新生成（设计稿演示）">重新生成</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 视图：实时热点 ===== -->
+      <section class="view" data-view="hotspot">
+        <div class="row" style="margin-bottom:14px;flex-wrap:wrap">
+          <div class="hot-tabs" style="margin-bottom:0">
+            <button class="hot-tab on">抖音热榜</button>
+            <button class="hot-tab">微博热搜</button>
+            <button class="hot-tab">B 站热门</button>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" id="refreshHot" data-toast="正在刷新（设计稿模拟）">刷新</button>
+            <button class="btn btn-soft btn-sm" data-toast="将热点接入生成工作台（设计稿演示）">接入生成</button>
+          </div>
+        </div>
+        <div id="hotList"></div>
+        <div class="manual-input">
+          <input class="input" id="hotManual" placeholder="手动输入热点 / 话题（接口不可用时兜底）…">
+          <button class="btn btn-primary btn-sm" data-toast="已加入热点列表（设计稿演示）">添加</button>
+        </div>
+      </section>
+
+      <!-- ===== 视图：消耗统计 ===== -->
+      <section class="view" data-view="usage">
+        <div class="usage-sum">
+          <div class="kpi"><div class="k">今日消耗</div><div class="v">¥0.86</div><div class="d">3 次生成 · 1 次分析</div></div>
+          <div class="kpi"><div class="k">本周消耗</div><div class="v">¥6.4</div><div class="d">较上周 -22%</div></div>
+          <div class="kpi"><div class="k">本月累计</div><div class="v">¥24.7</div><div class="d">预算剩余 ¥75.3</div></div>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-title">近 7 日消耗 <span class="hint">示例数据</span></div>
+          <div class="bars" id="usageBars"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">按模型统计 <span class="hint">价格表为数据文件，可编辑</span></div>
+          <div class="usage-table" id="usageTable"></div>
+        </div>
+      </section>
+
+      <!-- ===== 视图：设置（占位） ===== -->
+      <section class="view" data-view="settings">
+        <div class="card">
+          <div class="card-title">设置 <span class="hint">P2 落地</span></div>
+          <div style="color:var(--text-muted);font-size:13.5px">API 密钥（.env）、模型默认值、热点源选择、价格表维护将在此面板落地。</div>
+          <div style="margin-top:14px;display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" data-toast="密钥配置在 P2 接入（设计稿演示）">密钥配置</button>
+            <button class="btn btn-ghost btn-sm" data-toast="价格表编辑在 P2 接入（设计稿演示）">价格表</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+(function(){
+  'use strict';
+  /* ---------- 示例数据（仅设计稿演示） ---------- */
+  var DOCS = [
+    {name:'名表回收口播脚本-0715.md', type:'MD', size:'8.2 KB', time:'2026-09-30 10:24', tags:[['gold','口播'],['blue','名表']]},
+    {name:'包袋验货流程要点.txt', type:'TXT', size:'14.6 KB', time:'2026-09-29 16:02', tags:[['green','验货'],['','包袋']]},
+    {name:'行情周报-W32.docx', type:'DOCX', size:'46.1 KB', time:'2026-09-28 09:41', tags:[['gold','行情'],['blue','周报']]},
+    {name:'Richard Mille 话术库.md', type:'MD', size:'21.3 KB', time:'2026-09-27 14:55', tags:[['blue','名表']]},
+    {name:'Chanel 包回收价格表 v3.xlsx', type:'XLSX', size:'32.8 KB', time:'2026-09-26 11:12', tags:[['gold','价格'],['','包袋']]},
+    {name:'剧情种草脚本-0715.md', type:'MD', size:'11.9 KB', time:'2026-09-25 18:33', tags:[['green','剧情'],['','脚本']]},
+    {name:'Zenith 到货验货记录.txt', type:'TXT', size:'3.4 KB', time:'2026-09-24 20:07', tags:[['blue','名表'],['green','验货']]},
+    {name:'小红书种草文案集.md', type:'MD', size:'17.5 KB', time:'2026-09-23 15:26', tags:[['gold','种草'],['','小红书']]},
+    {name:'客户常见异议汇总.txt', type:'TXT', size:'6.8 KB', time:'2026-09-22 10:58', tags:[['','客服'],['blue','话术']]},
+    {name:'2026 名表行情年报.docx', type:'DOCX', size:'88.4 KB', time:'2026-09-20 13:40', tags:[['gold','行情'],['','年报']]}
+  ];
+  var HOT = [
+    {rank:1, title:'二手名表回收价格出现两极分化，这些品牌不跌反涨', heat:'128.4万', trend:'up', tags:[['blue','名表'],['gold','行情']]},
+    {rank:2, title:'年轻人开始把闲置包袋变现，回收平台日询价量翻倍', heat:'96.7万', trend:'up', tags:[['','包袋'],['green','趋势']]},
+    {rank:3, title:'LV 老花包行情回暖，专柜同款二手价逼近公价', heat:'81.2万', trend:'up', tags:[['','包袋']]},
+    {rank:4, title:'鉴定师揭秘：回收行业三个最常见的压价话术', heat:'64.9万', trend:'up', tags:[['red','避坑']]},
+    {rank:5, title:'劳力士行情周报：哪些表款还在跌？', heat:'52.3万', trend:'down', tags:[['blue','名表']]},
+    {rank:6, title:'爱马仕铂金包保值率实测：5 年还能回本多少', heat:'47.8万', trend:'up', tags:[['gold','行情']]}
+  ];
+  var BAR7 = [
+    {d:'周一', v:0.96}, {d:'周二', v:1.42}, {d:'周三', v:0.78}, {d:'周四', v:1.15},
+    {d:'周五', v:0.86}, {d:'周六', v:0.62}, {d:'周日', v:0.45}
+  ];
+  var MODEL_USAGE = [
+    {m:'豆包 · doubao-seed-2.0-pro', p:'¥0.30 / 1M in · ¥0.60 / 1M out', amt:'¥9.6', tag:'gold', tagTxt:'主力'},
+    {m:'OpenAI · gpt-5', p:'¥2.50 / 1M in · ¥10 / 1M out', amt:'¥8.2', tag:'', tagTxt:'备用'},
+    {m:'Anthropic · claude-sonnet-4', p:'¥1.60 / 1M in · ¥8 / 1M out', amt:'¥5.1', tag:'', tagTxt:'备用'},
+    {m:'本地 · Ollama qwen3', p:'¥0（本地推理）', amt:'¥1.8', tag:'green', tagTxt:'省钱'}
+  ];
+  var TITLES = {
+    library:['文档库','所有喂给 Goodidea 的材料都沉淀在这里'],
+    analysis:['智能分析','浓缩全文 · 指出问题 · 主题聚类'],
+    studio:['生成工作台','基于你的素材与热点，生成新内容'],
+    hotspot:['实时热点','跨平台热榜，一键接入生成'],
+    usage:['消耗统计','各模型费用与每日用量一目了然'],
+    settings:['设置','密钥 · 模型 · 热点源 · 价格表']
+  };
+
+  var $ = function(s){ return document.querySelector(s); };
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  /* ---------- Toast ---------- */
+  var toastEl = $('#toast'), toastTimer = null;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 2200);
+  }
+  document.addEventListener('click', function(e){
+    var t = e.target.closest('[data-toast]');
+    if(t) toast(t.getAttribute('data-toast'));
+  });
+
+  /* ---------- Hash 路由 ---------- */
+  var views = Array.prototype.slice.call(document.querySelectorAll('.view'));
+  var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav-item'));
+  function route(){
+    var hash = (location.hash || '#library').replace('#','');
+    if(!TITLES[hash]) hash = 'library';
+    views.forEach(function(v){ v.classList.toggle('active', v.getAttribute('data-view') === hash); });
+    navItems.forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-view') === hash); });
+    $('#pageTitle').textContent = TITLES[hash][0];
+    $('#pageDesc').textContent = TITLES[hash][1];
+  }
+  window.addEventListener('hashchange', route);
+  route();
+
+  /* ---------- 模型下拉联动 ---------- */
+  $('#modelSelect').addEventListener('change', function(){
+    var map = {'豆包':'¥0.86','OpenAI':'¥1.24','Anthropic':'¥0.98','Ollama':'¥0.12'};
+    var k = Object.keys(map).find(function(k){ return this.value.indexOf(k) === 0; }, this);
+    $('#todayCost').textContent = map[k] || '¥0.86';
+    toast('已切换模型：' + this.value + '（示例）');
+  });
+
+  /* ---------- 文档库渲染 ---------- */
+  var rowsEl = $('#docRows');
+  function fileIcon(type){
+    var c = type === 'DOCX' ? '#7FB5FF' : type === 'XLSX' ? '#6FD3A4' : '#97A2B3';
+    return '<svg viewBox="0 0 24 24" style="stroke:' + c + '"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+  }
+  function renderDocs(list){
+    rowsEl.innerHTML = list.map(function(d){
+      return '<tr>' +
+        '<td><div class="fname">' + fileIcon(d.type) + '<span class="t">' + esc(d.name) + '</span></div>' +
+          '<div class="fmeta">' + esc(d.time) + '</div></td>' +
+        '<td><span class="tag">' + esc(d.type) + '</span></td>' +
+        '<td>' + esc(d.size) + '</td>' +
+        '<td style="color:var(--text-muted);font-size:12.5px">' + esc(d.time) + '</td>' +
+        '<td><div style="display:flex;gap:5px;flex-wrap:wrap">' + d.tags.map(function(t){ return '<span class="tag ' + t[0] + '">' + esc(t[1]) + '</span>'; }).join('') + '</div></td>' +
+        '<td><div class="row-actions">' +
+          '<button class="icon-btn" data-toast="对本文档执行分析（设计稿演示）" title="分析"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-6 3 4 5-7"/></svg></button>' +
+          '<button class="icon-btn" data-toast="删除确认流程在 P1 接入（设计稿演示）" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
+        '</div></td></tr>';
+    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:22px">没有匹配的文档</td></tr>';
+  }
+  renderDocs(DOCS);
+  $('#statDocs').textContent = DOCS.length;
+  $('#statChars').textContent = '8.4万';
+  $('#statChunks').textContent = '326';
+  $('#navCount').textContent = DOCS.length;
+  $('#recentList').innerHTML = DOCS.slice(0,3).map(function(d){
+    return '<div style="padding:4px 0;display:flex;align-items:center;gap:7px"><span class="status-dot"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.name) + '</span></div>';
+  }).join('');
+  $('#docSearch').addEventListener('input', function(){
+    var q = this.value.trim().toLowerCase();
+    renderDocs(q ? DOCS.filter(function(d){
+      return d.name.toLowerCase().indexOf(q) > -1 || d.tags.some(function(t){ return t[1].toLowerCase().indexOf(q) > -1; });
+    }) : DOCS);
+  });
+
+  /* ---------- 上传区拖拽 ---------- */
+  var dz = $('#dropzone');
+  ['dragenter','dragover'].forEach(function(ev){ dz.addEventListener(ev, function(e){ e.preventDefault(); dz.classList.add('drag'); }); });
+  ['dragleave','drop'].forEach(function(ev){ dz.addEventListener(ev, function(e){ e.preventDefault(); dz.classList.remove('drag'); }); });
+
+  /* ---------- Chips 切换 ---------- */
+  document.querySelectorAll('.chips .chip').forEach(function(c){
+    c.addEventListener('click', function(){ c.classList.toggle('on'); });
+  });
+  document.querySelectorAll('.hot-tab').forEach(function(t){
+    t.addEventListener('click', function(){
+      document.querySelectorAll('.hot-tab').forEach(function(x){ x.classList.remove('on'); });
+      t.classList.add('on');
+      toast('切换热榜源：' + t.textContent + '（示例）');
+    });
+  });
+
+  /* ---------- 热点渲染 ---------- */
+  $('#hotList').innerHTML = HOT.map(function(h){
+    var trend = h.trend === 'up'
+      ? '<span class="up">▲ ' + (h.rank <= 3 ? '12.4%' : '6.8%') + '</span>'
+      : '<span class="down">▼ 3.2%</span>';
+    return '<div class="hot-item">' +
+      '<div class="hot-rank' + (h.rank <= 3 ? ' top' : '') + '">' + h.rank + '</div>' +
+      '<div class="hot-body"><div class="t">' + esc(h.title) + '</div>' +
+      '<div class="s">' + trend + '<span>示例数据</span><span>10 分钟更新</span></div></div>' +
+      '<div class="hot-tags">' + h.tags.map(function(t){ return '<span class="tag ' + t[0] + '">' + esc(t[1]) + '</span>'; }).join('') + '</div>' +
+      '<div class="hot-val"><div class="hv">' + esc(h.heat) + '</div><div class="hl">热度</div></div>' +
+      '</div>';
+  }).join('');
+  $('#refreshHot').addEventListener('click', function(){
+    var btn = this;
+    btn.innerHTML = '刷新中…';
+    setTimeout(function(){ btn.innerHTML = '刷新'; toast('热点已刷新（示例）'); }, 900);
+  });
+  $('#hotManual').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') toast('已加入热点列表（设计稿演示）');
+  });
+
+  /* ---------- 消耗统计渲染 ---------- */
+  var maxV = Math.max.apply(null, BAR7.map(function(b){ return b.v; }));
+  $('#usageBars').innerHTML = BAR7.map(function(b){
+    return '<div class="bar-col"><div class="fill ' + (b.d === '周五' ? 'green' : '') + '" style="height:' + Math.round(b.v / maxV * 100) + '%"></div>' +
+      '<div class="val">¥' + b.v.toFixed(2) + '</div><div class="lbl">' + b.d + '</div></div>';
+  }).join('');
+  $('#usageTable').innerHTML = MODEL_USAGE.map(function(u){
+    return '<div class="row-line"><span class="m">' + esc(u.m) + '</span>' +
+      '<span class="p">' + esc(u.p) + '</span>' +
+      '<span class="amt">' + esc(u.amt) + '</span>' +
+      '<span class="tag ' + u.tag + '" style="width:auto">' + esc(u.tagTxt) + '</span></div>';
+  }).join('');
+})();
+</script>
+</body>
+</html>
+
