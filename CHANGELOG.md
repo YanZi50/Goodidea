@@ -15,3 +15,9 @@
 - 初始化 Tauri 2 + Vue 3 + TS 工程脚手架（vue-ts 官方模板手动渲染落地）：Vite 8 / vue-tsc 3 构建链路全绿、`tauri.conf.json`（identifier=com.goodidea.app，窗口 800×600）、src-tauri 薄壳（tauri 2.12 + opener 插件）、前端/后端依赖分别锁定（package-lock.json + Cargo.lock）（@5c61e2d）
 - 新增 `README.md`：项目定位、开发命令（dev/build/check/打包）、目录结构、P0 状态说明
 - BUGS.md 记录 BUG-006：create-tauri-app `--force` 清空目标目录事故（即使报错退出），脚手架通道改为模板手动渲染（@5c61e2d）
+
+### Changed
+- 五面板深色 UI 骨架落地（Vue3 + TS）：文档库 / 智能分析 / 生成工作台 / 实时热点 / 消耗统计 / 设置六视图组件 + 侧栏/顶栏组件；设计稿 CSS（16.8KB）提取为全局样式 `src/assets/main.css`，类名与设计稿对齐；hash 路由 + v-show 视图切换；全部按钮带 toast 反馈（无僵尸按钮）；示例数据渲染并标注（@d543667）
+- `index.html`：lang=zh-CN、内联 SVG favicon、标题 Goodidea；`vite.config.ts` base 改相对路径（file:// 可直接打开构建产物，兼容 Tauri 自定义协议）（@d543667）
+- 窗口尺寸 800×600 → 1280×800（min 960×640，居中），适配桌面工作台（@d543667）
+- 验证：vue-tsc + vite build 全绿；构建产物内联后经 shot.py 双端截图，控制台错误 0 / 溢出 0（@d543667）
