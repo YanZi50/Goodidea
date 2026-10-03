@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, provide, onMounted } from "vue";
+import { ref, provide, onMounted, watch } from "vue";
 import Sidebar from "./components/Sidebar.vue";
 import Topbar from "./components/Topbar.vue";
 import LibraryView from "./views/LibraryView.vue";
@@ -9,6 +9,12 @@ import HotspotView from "./views/HotspotView.vue";
 import UsageView from "./views/UsageView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import { reloadPriceTable } from "./lib/ai";
+
+// 页面亮暗（左下角滑块调节；持久化，默认 1 = 原亮度）
+const BRIGHT_KEY = "goodidea.ui.brightness.v1";
+const brightness = ref<number>(Number(localStorage.getItem(BRIGHT_KEY)) || 1);
+provide("brightness", brightness);
+watch(brightness, (v) => localStorage.setItem(BRIGHT_KEY, String(v)));
 
 const TITLES: Record<string, [string, string]> = {
   library: ["文档库", "所有喂给 Goodidea 的材料都沉淀在这里"],
@@ -52,7 +58,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app">
+  <div class="app" :style="{ filter: 'brightness(' + brightness + ')' }">
     <Sidebar :active="activeView" @navigate="navigate" />
     <div class="main">
       <Topbar :title="TITLES[activeView][0]" :desc="TITLES[activeView][1]" />

@@ -4,6 +4,7 @@ import { inject } from "vue";
 defineProps<{ active: string }>();
 const emit = defineEmits<{ navigate: [id: string] }>();
 const toast = inject("toast") as (msg: string) => void;
+const brightness = inject("brightness") as { value: number };
 
 const mainItems = [
   { id: "library", label: "文档库", badge: "", icon: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>' },
@@ -50,12 +51,19 @@ function navigate(id: string) {
       </a>
     </nav>
     <div class="sidebar-foot">
-      <button class="foot-btn" @click="toast('设置与帮助即将开放（设计稿演示）')">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></svg><span>帮助</span>
-      </button>
-      <button class="foot-btn" @click="toast('导出知识库备份即将开放（设计稿演示）')">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg><span>导出</span>
-      </button>
+      <div class="brightness">
+        <svg viewBox="0 0 24 24" title="变暗"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
+        <input type="range" min="0.6" max="1.6" step="0.05" v-model.number="brightness.value" title="页面亮度" />
+        <svg viewBox="0 0 24 24" title="变亮"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+      </div>
+      <div class="foot-btns">
+        <button class="foot-btn" @click="toast('设置与帮助即将开放（设计稿演示）')">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></svg><span>帮助</span>
+        </button>
+        <button class="foot-btn" @click="toast('导出知识库备份即将开放（设计稿演示）')">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg><span>导出</span>
+        </button>
+      </div>
     </div>
   </aside>
 </template>

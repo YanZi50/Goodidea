@@ -32,7 +32,11 @@ input,select,textarea{font-family:inherit;color:inherit}
 .nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
 .nav-badge{margin-left:auto;font-size:11px;background:var(--surface-3);color:var(--text-muted);padding:1px 8px;border-radius:20px}
 .nav-sep{height:1px;background:var(--border);margin:8px 4px}
-.sidebar-foot{padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:6px}
+.sidebar-foot{padding:12px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.foot-btns{display:flex;gap:6px}
+.brightness{display:flex;align-items:center;gap:8px}
+.brightness svg{width:14px;height:14px;stroke:var(--text-faint);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.brightness input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer;min-width:0}
 .foot-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:var(--radius-sm);color:var(--text-faint);font-size:12.5px;transition:color .16s,background .16s}
 .foot-btn:hover{color:var(--text);background:var(--surface-2)}
 .foot-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
