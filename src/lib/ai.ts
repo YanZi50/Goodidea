@@ -72,7 +72,10 @@ export async function streamGeneration(cfg: AIConfig, system: string, prompt: st
 // ---------- 计费（P1 常量价格表；P2 迁入 billing_rules 数据表） ----------
 
 const PRICE_TABLE: Record<string, { in: number; out: number }> = {
-  // 单位：元 / 百万 token
+  // 单位：元 / 百万 token；来源：官方定价页（2026-09 快照），峰谷时段/优惠可能有差异，P2 迁入 billing_rules 数据表维护
+  "deepseek-v4-flash": { in: 1, out: 2 },
+  "deepseek-chat": { in: 1, out: 2 }, // 旧名兼容映射（弃用后等价 v4-flash 非思考模式）
+  "deepseek-v4-pro": { in: 3, out: 6 },
   "doubao-seed-2.0-pro": { in: 0.3, out: 0.6 },
   "gpt-5": { in: 2.5, out: 10 },
   "claude-sonnet-4": { in: 1.6, out: 8 },
