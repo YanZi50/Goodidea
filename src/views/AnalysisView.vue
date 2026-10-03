@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listDocuments, countChunks, listAllChunkContent } from "../lib/db";
+import { listDocuments, countChunks, listAllChunkContent, listGroups, parseTags } from "../lib/db";
 import {
   loadAIConfig,
   runGeneration,
@@ -21,20 +21,41 @@ const analyzing = ref(false);
 const result = ref("");
 const lastMeta = ref<{ tokens: string; cost: string; at: string } | null>(null);
 
+// ---- 分析范围：全部 / 按分组 ----
+const groups = ref<string[]>([]);
+const scope = ref(""); // "" = 全部，否则为分组名
+const scopeLabel = computed(() => (scope.value ? `分组「${scope.value}」` : "全部文档"));
+
+/** 当前范围内的文档 id（分组时为该组文档） */
+function scopeDocIds(): number[] | undefined {
+  if (!scope.value) return undefined;
+  const ids = docsCache.value.filter((d) => parseTags(d.tags).includes(scope.value)).map((d) => d.id);
+  return ids.length > 0 ? ids : undefined;
+}
+const docsCache = ref<{ id: number; tags: string | null }[]>([]);
+
+async function refresh() {
+  docsCache.value = await listDocuments();
+  groups.value = await listGroups();
+  if (scope.value && !groups.value.includes(scope.value)) scope.value = "";
+  await refreshScopeStats();
+  today.value = todayCost();
+  modelLabel.value = loadAIConfig()?.label ?? "";
+}
+
+async function refreshScopeStats() {
+  const ids = scopeDocIds();
+  docCount.value = ids === undefined ? docsCache.value.length : ids.length;
+  chunkCount.value = (await countChunks(ids)) ?? 0;
+}
+
+onMounted(refresh);
+
 /** AI 输出（Markdown）→ 消毒后的 HTML */
 const renderedResult = computed(() => {
   if (!result.value) return "";
   return DOMPurify.sanitize(marked.parse(result.value, { async: false }) as string);
 });
-
-async function refresh() {
-  docCount.value = (await listDocuments()).length;
-  chunkCount.value = (await countChunks()) ?? 0;
-  today.value = todayCost();
-  modelLabel.value = loadAIConfig()?.label ?? "";
-}
-
-onMounted(refresh);
 
 async function runAnalysis() {
   const cfg = loadAIConfig();
@@ -42,9 +63,14 @@ async function runAnalysis() {
     toast("请先到「设置 → 模型接入」配置 API Key 与模型 ID");
     return;
   }
-  const chunks = await listAllChunkContent(60);
+  const ids = scopeDocIds();
+  if (scope.value && ids === undefined) {
+    toast(`分组「${scope.value}」暂无文档 — 先在文档库给文档设置该分组`);
+    return;
+  }
+  const chunks = await listAllChunkContent(60, ids);
   if (chunks.length === 0) {
-    toast("知识库为空 — 先在文档库导入文档");
+    toast(scope.value ? `分组「${scope.value}」没有可分析的内容` : "知识库为空 — 先在文档库导入文档");
     return;
   }
   analyzing.value = true;
@@ -56,7 +82,7 @@ async function runAnalysis() {
     "2) 指出问题：内部矛盾、信息缺口、低质/冗余段落、改进建议，逐条列出并标注优先级。",
     "使用 Markdown 结构输出：## 核心要点 / ## 指出问题。",
   ].join("\n");
-  const prompt = `以下是知识库全文（截取前 60 块）：\n\n${chunks.join("\n---\n")}`;
+  const prompt = `以下是知识库内容（范围：${scopeLabel.value}，截取前 60 块）：\n\n${chunks.join("\n---\n")}`;
 
   try {
     const res = await runGeneration(cfg, system, prompt);
@@ -81,16 +107,21 @@ async function runAnalysis() {
 <template>
   <div>
     <div class="kpis">
-      <div class="kpi"><div class="k">知识库文档</div><div class="v">{{ docCount }}<small>篇</small></div><div class="d">全库实时</div></div>
+      <div class="kpi"><div class="k">范围内文档</div><div class="v">{{ docCount }}<small>篇</small></div><div class="d">{{ scopeLabel }}</div></div>
       <div class="kpi"><div class="k">覆盖文本</div><div class="v">{{ chunkCount }}<small>块</small></div><div class="d">前 60 块参与分析</div></div>
       <div class="kpi"><div class="k">今日消耗</div><div class="v">¥{{ today.toFixed(2) }}</div><div class="d">分析 + 生成合计</div></div>
       <div class="kpi"><div class="k">当前模型</div><div class="v" style="font-size:17px">{{ modelLabel || "未配置" }}</div><div class="d" :style="{ color: modelLabel ? 'var(--green)' : 'var(--red)' }">{{ modelLabel ? "已就绪" : "去设置页配置" }}</div></div>
     </div>
     <div class="card" style="margin-bottom:14px">
-      <div class="card-title">全库分析 <span class="hint">P1 · 真实调用（豆包/OpenAI 兼容）</span></div>
-      <div v-if="analyzing" style="color:var(--text-faint);font-size:13px;padding:10px 0">正在分析全库（约 30–90 秒）…</div>
+      <div class="card-title">智能分析 <span class="hint">范围可切换</span></div>
+      <div class="scope-bar">
+        <button class="chip" :class="{ on: scope === '' }" @click="scope = ''; refreshScopeStats()">全部文档</button>
+        <button v-for="g in groups" :key="g" class="chip" :class="{ on: scope === g }" @click="scope = g; refreshScopeStats()">{{ g }}</button>
+        <span v-if="groups.length === 0" style="color:var(--text-faint);font-size:12px">暂无分组 — 到文档库给文档设置分组后可聚焦分析</span>
+      </div>
+      <div v-if="analyzing" style="color:var(--text-faint);font-size:13px;padding:10px 0">正在分析{{ scopeLabel }}（约 30–90 秒）…</div>
       <div v-else-if="result" class="scroll-limit"><div class="md-render" v-html="renderedResult"></div></div>
-      <div v-else style="color:var(--text-faint);font-size:13px;padding:10px 0">点击「重新分析全库」：浓缩核心要点 + 指出问题（矛盾 / 缺口 / 低质段落 / 建议）。</div>
+      <div v-else style="color:var(--text-faint);font-size:13px;padding:10px 0">选择范围后点击「开始分析」：浓缩核心要点 + 指出问题（矛盾 / 缺口 / 低质段落 / 建议）。</div>
       <div v-if="lastMeta" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">
         <span class="tag green">{{ lastMeta.cost }}</span>
         <span class="tag blue">{{ lastMeta.tokens }}</span>
@@ -98,7 +129,7 @@ async function runAnalysis() {
       </div>
       <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
         <button class="btn btn-primary" :disabled="analyzing" @click="runAnalysis">
-          <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 15l4-6 3 4 5-7" /></svg>{{ analyzing ? "分析中…" : "重新分析全库" }}
+          <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 15l4-6 3 4 5-7" /></svg>{{ analyzing ? "分析中…" : (scope ? "开始分析该分组" : "重新分析全部") }}
         </button>
         <button class="btn btn-ghost" @click="toast('增量分析将在 P3 接入')">仅分析新增</button>
       </div>
