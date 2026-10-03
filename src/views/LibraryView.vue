@@ -13,6 +13,7 @@ import {
   setDocumentsGroup,
 } from "../lib/db";
 import { ingestFile } from "../lib/ingest";
+import { emitDataChanged } from "../lib/bus";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -48,6 +49,8 @@ async function refresh() {
   if (typeof groupFilter.value === "number" && !groups.value.some((g) => g.id === groupFilter.value)) {
     groupFilter.value = "all";
   }
+  // 广播数据变更：分析页等消费方实时同步（建组/删组/移组/导入/删除后无需手动刷新）
+  emitDataChanged();
 }
 
 onMounted(refresh);

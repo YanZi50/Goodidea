@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, inject } from "vue";
+import { ref, computed, onMounted, onUnmounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listDocuments, countChunks, listAllChunkContent, listGroups } from "../lib/db";
+import { onDataChanged } from "../lib/bus";
 import {
   loadAIConfig,
   runGeneration,
@@ -57,7 +58,12 @@ async function refreshScopeStats() {
   chunkCount.value = (await countChunks(ids)) ?? 0;
 }
 
-onMounted(refresh);
+onMounted(() => {
+  refresh();
+  // 文档库数据变更（建组/删组/移组/导入/删除）实时同步本页分组与统计，无需手动刷新
+  const off = onDataChanged(() => void refresh());
+  onUnmounted(off);
+});
 
 /** AI 输出（Markdown）→ 消毒后的 HTML */
 const renderedResult = computed(() => {
