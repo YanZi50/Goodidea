@@ -30,7 +30,6 @@ const newTag = ref("");
 
 // ---- 批量选择 ----
 const selected = ref<Set<number>>(new Set());
-const batchTagOpen = ref(false);
 const batchTag = ref("");
 const batchNewTag = ref("");
 
@@ -134,8 +133,11 @@ async function saveEditor(d: DocumentRow) {
 // ---- 批量设置分组 ----
 async function applyBatchTag() {
   const ids = [...selected.value];
-  const tag = batchTag.value.trim();
-  if (ids.length === 0 || !tag) return;
+  const tag = (batchTag.value || batchNewTag.value).trim();
+  if (ids.length === 0 || !tag) {
+    toast("请先选择或输入分组名");
+    return;
+  }
   try {
     for (const id of ids) {
       const d = docs.value.find((x) => x.id === id);
@@ -145,7 +147,7 @@ async function applyBatchTag() {
     }
     toast(`已将 ${ids.length} 篇文档加入分组「${tag}」`);
     batchTag.value = "";
-    batchTagOpen.value = false;
+    batchNewTag.value = "";
     await refresh();
   } catch (err) {
     toast(`批量分组失败：${err instanceof Error ? err.message : String(err)}`);
@@ -158,7 +160,6 @@ async function clearSelectedTags() {
   try {
     for (const id of ids) await updateDocumentTags(id, []);
     toast(`已清除 ${ids.length} 篇文档的分组`);
-    batchTagOpen.value = false;
     await refresh();
   } catch (err) {
     toast(`清除失败：${err instanceof Error ? err.message : String(err)}`);
@@ -246,29 +247,30 @@ function onDrop(e: DragEvent) {
     </div>
 
     <div class="card" style="padding:0;overflow:hidden">
-      <!-- 常驻批量工具条（表格标题栏，勾选只变状态不跳动） -->
+      <!-- 第一行：常驻批量工具条（勾选只变状态不跳动） -->
       <div class="tbl-bar">
         <span class="tbl-bar-count">
           <b>{{ selected.size }}</b> 篇已选
           <span v-if="selected.size === 0" style="color:var(--text-faint);font-weight:400">· 勾选表格中文档后可批量操作</span>
         </span>
         <div class="tbl-bar-actions">
-          <button class="btn btn-soft btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '批量设置 / 新建分组'" @click="batchTagOpen = !batchTagOpen">编辑分组</button>
           <button class="btn btn-danger btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '删除选中文档'" @click="removeSelected">删除</button>
           <button class="btn btn-ghost btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '清除选中文档的分组'" @click="clearSelectedTags">清除分组</button>
           <button v-if="selected.size > 0" class="btn btn-ghost btn-sm" @click="selected = new Set()">取消</button>
         </div>
       </div>
-      <!-- 编辑分组展开区（工具条内展开，不推挤表格） -->
-      <div v-if="batchTagOpen" class="tbl-bar-tags">
-        <span class="tag-editor-label">加入分组：</span>
-        <select class="select" v-model="batchTag">
-          <option value="">选择已有分组…</option>
-          <option v-for="g in groups" :key="g" :value="g">{{ g }}</option>
-        </select>
-        <input class="input" v-model="batchNewTag" placeholder="或输入新分组名…" @keydown.enter="batchTag = batchNewTag.trim() || batchTag" />
-        <button class="btn btn-primary btn-sm" @click="applyBatchTag">应用</button>
-        <button class="btn btn-ghost btn-sm" @click="batchTagOpen = false">收起</button>
+      <!-- 第二行：常驻分组编辑槽位（固定高度，勾选/展开均不推挤表格） -->
+      <div class="tbl-bar-tags">
+        <template v-if="selected.size > 0">
+          <span class="tag-editor-label">加入分组：</span>
+          <select class="select" v-model="batchTag">
+            <option value="">选择已有分组…</option>
+            <option v-for="g in groups" :key="g" :value="g">{{ g }}</option>
+          </select>
+          <input class="input" v-model="batchNewTag" placeholder="或输入新分组名…" @keydown.enter="applyBatchTag" />
+          <button class="btn btn-primary btn-sm" @click="applyBatchTag">应用</button>
+        </template>
+        <span v-else class="tag-editor-label" style="color:var(--text-faint)">勾选文档后，可在这里批量设置 / 新建分组</span>
       </div>
       <div class="scroll-limit">
         <table class="tbl">
@@ -378,9 +380,10 @@ function onDrop(e: DragEvent) {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   padding: 10px 14px; border-bottom: 1px solid var(--surface-2);
   background: rgba(232, 179, 106, 0.05); font-size: 12.5px;
+  min-height: 46px;
 }
-.tbl-bar-tags .select { width: 180px; }
-.tbl-bar-tags .input { width: 180px; }
+.tbl-bar-tags .select { width: 180px; flex-shrink: 0; }
+.tbl-bar-tags .input { width: 180px; flex-shrink: 0; }
 tr.sel td { background: rgba(232, 179, 106, 0.06); }
 .tag-editor-row td { border-top: 1px dashed var(--surface-2); }
 .tag-editor { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 0; }
