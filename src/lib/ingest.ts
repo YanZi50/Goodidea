@@ -75,6 +75,40 @@ export function chunkText(text: string, maxLen = 1500): string[] {
   return chunks;
 }
 
+/** 公共入库：文本 → 哈希去重 → 分块 → 写库；返回 inserted / duplicate */
+async function persistText(
+  text: string,
+  filename: string,
+  fileType: string,
+  targetGroupId: number | null
+): Promise<{ status: "inserted"; docId: number; chunks: number } | { status: "duplicate"; docId: number }> {
+  const hash = await sha256(text);
+  const existing = await findDocumentByHash(hash);
+  if (existing) {
+    return { status: "duplicate", docId: existing.id };
+  }
+  const ext = (filename.split(".").pop() ?? "").toLowerCase();
+  const tags = JSON.stringify(ext === "docx" ? ["docx"] : ext === "md" ? ["md"] : ["txt"]);
+  const docId = await insertDocument({
+    filename,
+    file_type: fileType,
+    file_hash: hash,
+    size: new TextEncoder().encode(text).length,
+    tags,
+    group_id: targetGroupId,
+  });
+  const chunks = chunkText(text);
+  for (let i = 0; i < chunks.length; i++) {
+    await insertChunk({
+      doc_id: docId,
+      seq: i + 1,
+      content: chunks[i],
+      token_count: Math.max(1, Math.round(chunks[i].length / 1.8)),
+    });
+  }
+  return { status: "inserted", docId, chunks: chunks.length };
+}
+
 /** 入库一个文件；返回状态（inserted / duplicate / error）；targetGroupId 为 null 时归入未分组 */
 export async function ingestFile(
   file: File,
@@ -85,33 +119,24 @@ export async function ingestFile(
   try {
     const ext = (file.name.split(".").pop() ?? "").toLowerCase();
     const text = await readFileText(file);
-    const hash = await sha256(text);
+    return await persistText(text, file.name, ext.toUpperCase(), targetGroupId);
+  } catch (err) {
+    return { status: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+}
 
-    const existing = await findDocumentByHash(hash);
-    if (existing) {
-      return { status: "duplicate", docId: existing.id };
-    }
-
-    const tags = JSON.stringify(ext === "docx" ? ["docx"] : ext === "md" ? ["md"] : ["txt"]);
-    const docId = await insertDocument({
-      filename: file.name,
-      file_type: ext.toUpperCase(),
-      file_hash: hash,
-      size: file.size,
-      tags,
-      group_id: targetGroupId,
-    });
-
-    const chunks = chunkText(text);
-    for (let i = 0; i < chunks.length; i++) {
-      await insertChunk({
-        doc_id: docId,
-        seq: i + 1,
-        content: chunks[i],
-        token_count: Math.max(1, Math.round(chunks[i].length / 1.8)),
-      });
-    }
-    return { status: "inserted", docId, chunks: chunks.length };
+/** 粘贴文本入库（二期落地）：filename 需带扩展名决定类型标签 */
+export async function ingestText(
+  text: string,
+  filename: string,
+  targetGroupId: number | null = null
+): Promise<
+  { status: "inserted"; docId: number; chunks: number } | { status: "duplicate"; docId: number } | { status: "error"; message: string }
+> {
+  try {
+    if (!text.trim()) throw new Error("文本内容为空");
+    const ext = (filename.split(".").pop() ?? "md").toLowerCase();
+    return await persistText(text, filename, ext.toUpperCase(), targetGroupId);
   } catch (err) {
     return { status: "error", message: err instanceof Error ? err.message : String(err) };
   }

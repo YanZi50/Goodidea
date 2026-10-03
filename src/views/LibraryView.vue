@@ -12,8 +12,8 @@ import {
   setDocumentGroup,
   setDocumentsGroup,
 } from "../lib/db";
-import { ingestFile } from "../lib/ingest";
-import { emitDataChanged } from "../lib/bus";
+import { ingestFile, ingestText } from "../lib/ingest";
+import { emitDataChanged, emitAnalyzeDocRequest } from "../lib/bus";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -37,6 +37,56 @@ const editGroupId = ref<number | "">(""); // "" = 未分组（select 原生空�
 const selected = ref<Set<number>>(new Set());
 const batchGroup = ref<number | "">("");
 const targetGroup = ref<number | "">(""); // 导入时归属组
+
+// ---- 粘贴文本入库 ----
+const pasteOpen = ref(false);
+const pasteText = ref("");
+const pasteName = ref("");
+const pasteGroup = ref<number | "">("");
+const pasting = ref(false);
+
+function openPaste() {
+  pasteOpen.value = !pasteOpen.value;
+  if (pasteOpen.value) {
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    pasteName.value = `粘贴文本-${stamp}.md`;
+    pasteGroup.value = targetGroup.value;
+  }
+}
+
+async function submitPaste() {
+  const text = pasteText.value;
+  if (!text.trim()) {
+    toast("粘贴内容为空");
+    return;
+  }
+  pasting.value = true;
+  const gid = pasteGroup.value === "" ? null : pasteGroup.value;
+  try {
+    const r = await ingestText(text, pasteName.value.trim() || "粘贴文本.md", gid);
+    if (r.status === "inserted") {
+      toast(`已入库：${pasteName.value}（${r.chunks} 块）${gid !== null ? `· 归入「${groupName(gid)}」` : ""}`);
+      pasteText.value = "";
+      pasteOpen.value = false;
+    } else if (r.status === "duplicate") {
+      toast("内容与库中已有文档重复，已跳过");
+    } else {
+      toast(`导入失败：${r.message}`);
+    }
+    await refresh();
+  } catch (err) {
+    toast(`导入失败：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    pasting.value = false;
+  }
+}
+
+/** 行内「分析」：切到分析页并请求单篇分析 */
+function analyzeDoc(d: DocumentRow) {
+  location.hash = "analysis";
+  emitAnalyzeDocRequest(d.id);
+}
 
 async function refresh() {
   docs.value = await listDocuments();
@@ -259,6 +309,25 @@ function onDrop(e: DragEvent) {
         @change="handleFiles(($event.target as HTMLInputElement).files ?? [])"
       />
     </div>
+
+    <!-- 粘贴文本入库面板（inline 展开，不弹窗） -->
+    <div v-if="pasteOpen" class="paste-panel">
+      <textarea
+        class="textarea"
+        v-model="pasteText"
+        placeholder="粘贴口播文案 / 脚本 / 笔记正文…"
+        style="min-height:110px"
+      ></textarea>
+      <div class="paste-row">
+        <input class="input" v-model="pasteName" style="width:230px" title="文件名（扩展名决定类型标签）" />
+        <select class="select" v-model="pasteGroup" style="width:150px">
+          <option value="">归入：未分组</option>
+          <option v-for="g in groups" :key="g.id" :value="g.id">归入：{{ g.name }}</option>
+        </select>
+        <button class="btn btn-primary btn-sm" :disabled="pasting" @click="submitPaste">{{ pasting ? "入库中…" : "入库" }}</button>
+        <button class="btn btn-ghost btn-sm" @click="pasteOpen = false">取消</button>
+      </div>
+    </div>
     <div class="toolbar">
       <div class="search">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>
@@ -268,7 +337,7 @@ function onDrop(e: DragEvent) {
         <option value="">导入到：未分组</option>
         <option v-for="g in groups" :key="g.id" :value="g.id">导入到：{{ g.name }}</option>
       </select>
-      <button class="btn btn-ghost" @click="toast('粘贴文本入库即将开放（P1 二期）')">粘贴文本</button>
+      <button class="btn btn-ghost" @click="openPaste">粘贴文本</button>
       <button class="btn btn-primary" :disabled="importing" @click="fileInput?.click()">
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>{{ importing ? `导入中 ${progress}…` : "批量导入" }}
       </button>
@@ -343,7 +412,7 @@ function onDrop(e: DragEvent) {
                 <button class="icon-btn" title="移入/移出分组" @click="editingId === d.id ? (editingId = null) : openEditor(d)">
                   <svg viewBox="0 0 24 24"><path d="M7 7h10M7 12h10M7 17h6" /></svg>
                 </button>
-                <button class="icon-btn" title="分析" @click="toast('单篇分析将在 P3 接入')">
+                <button class="icon-btn" title="单篇分析" @click="analyzeDoc(d)">
                   <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 15l4-6 3 4 5-7" /></svg>
                 </button>
                 <button class="icon-btn" title="删除" @click="removeDoc(d)">
@@ -420,6 +489,11 @@ function onDrop(e: DragEvent) {
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
 .g-new-input { width: 140px; padding: 5px 10px; }
+.paste-panel {
+  border: 1px solid rgba(232, 179, 106, 0.3); border-radius: 10px;
+  background: rgba(232, 179, 106, 0.05); padding: 10px 12px; margin: 10px 0 0;
+}
+.paste-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
 .tbl-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 14px; border-bottom: 1px solid var(--surface-2);
