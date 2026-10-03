@@ -24,3 +24,7 @@
 - SQLite 接入（tauri-plugin-sql v2 + sqlite feature）：Rust 侧注册插件并内置 Migration v1（documents/chunks 核心表，事务原子、幂等建表）；`tauri.conf.json` 配置 `plugins.sql.preload` 启动即建库；capabilities 授权 `sql:default` + `sql:allow-execute`；数据库文件 `goodidea.db`（AppConfig 目录）（@cf2568b）
 - 前端存储封装 `src/lib/db.ts`：惰性连接单例、文档计数 / 表清单 / 连接状态探测，带非 Tauri 环境守卫（file:// 预览不报错）；设置页新增「数据存储」卡展示连接状态与已建表（@cf2568b）
 - 验证：cargo check（sqlx/sqlite 编译）与 vue-tsc + vite build 全绿；设置页渲染 0 控制台错误（@cf2568b）
+
+### Added（P1 核心闭环）
+- 文档摄取闭环：拖拽 / 文件选择双通道导入 `.txt` / `.md` / `.docx`（mammoth 解析）；SHA-256 内容哈希去重（重复文件跳过并提示）；段落边界分块（超长段按句子硬切，≤1500 字符/块）；写入 `documents` + `chunks`；文档列表 / 分块总数 / 最近入库全部改为 SQLite 真实数据，空态引导文案；删除文档显式级联清理 chunks（不依赖 SQLite 外键默认关闭行为）；窗口 `dragDropEnabled: false` 启用 WebView 原生拖拽（@b60dc50）
+- 验证：vue-tsc + vite build 全绿（含 mammoth 类型）；cargo check 通过；文档库空态渲染 0 控制台错误（@b60dc50）
