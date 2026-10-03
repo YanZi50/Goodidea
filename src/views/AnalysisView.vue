@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listDocuments, countChunks, listAllChunkContent, listGroups, parseTags } from "../lib/db";
+import { listDocuments, countChunks, listAllChunkContent, listGroups } from "../lib/db";
 import {
   loadAIConfig,
   runGeneration,
@@ -21,23 +21,31 @@ const analyzing = ref(false);
 const result = ref("");
 const lastMeta = ref<{ tokens: string; cost: string; at: string } | null>(null);
 
-// ---- 分析范围：全部 / 按分组 ----
-const groups = ref<string[]>([]);
-const scope = ref(""); // "" = 全部，否则为分组名
-const scopeLabel = computed(() => (scope.value ? `分组「${scope.value}」` : "全部文档"));
+// ---- 分析范围：全部 / 未分组 / 按组 ----
+const groups = ref<{ id: number; name: string; doc_count: number }[]>([]);
+const scope = ref<"all" | "none" | number>("all"); // all=全部 / none=未分组 / number=组 id
+const scopeLabel = computed(() =>
+  scope.value === "none" ? "未分组文档" : typeof scope.value === "number" ? `分组「${groupName(scope.value)}」` : "全部文档"
+);
 
-/** 当前范围内的文档 id（分组时为该组文档） */
+function groupName(id: number): string {
+  return groups.value.find((g) => g.id === id)?.name ?? `#${id}`;
+}
+
+/** 当前范围内的文档 id（按组时为该组文档） */
 function scopeDocIds(): number[] | undefined {
-  if (!scope.value) return undefined;
-  const ids = docsCache.value.filter((d) => parseTags(d.tags).includes(scope.value)).map((d) => d.id);
+  if (scope.value === "all") return undefined;
+  const ids = docsCache.value
+    .filter((d) => (scope.value === "none" ? d.group_id === null : d.group_id === scope.value))
+    .map((d) => d.id);
   return ids.length > 0 ? ids : undefined;
 }
-const docsCache = ref<{ id: number; tags: string | null }[]>([]);
+const docsCache = ref<{ id: number; group_id: number | null }[]>([]);
 
 async function refresh() {
   docsCache.value = await listDocuments();
   groups.value = await listGroups();
-  if (scope.value && !groups.value.includes(scope.value)) scope.value = "";
+  if (typeof scope.value === "number" && !groups.value.some((g) => g.id === scope.value)) scope.value = "all";
   await refreshScopeStats();
   today.value = todayCost();
   modelLabel.value = loadAIConfig()?.label ?? "";
@@ -64,13 +72,13 @@ async function runAnalysis() {
     return;
   }
   const ids = scopeDocIds();
-  if (scope.value && ids === undefined) {
-    toast(`分组「${scope.value}」暂无文档 — 先在文档库给文档设置该分组`);
+  if (scope.value !== "all" && ids === undefined) {
+    toast(`${scopeLabel.value}暂无文档 — 先在文档库把文档移入该分组`);
     return;
   }
   const chunks = await listAllChunkContent(60, ids);
   if (chunks.length === 0) {
-    toast(scope.value ? `分组「${scope.value}」没有可分析的内容` : "知识库为空 — 先在文档库导入文档");
+    toast(scope.value !== "all" ? `${scopeLabel.value}没有可分析的内容` : "知识库为空 — 先在文档库导入文档");
     return;
   }
   analyzing.value = true;
@@ -115,9 +123,10 @@ async function runAnalysis() {
     <div class="card" style="margin-bottom:14px">
       <div class="card-title">智能分析 <span class="hint">范围可切换</span></div>
       <div class="scope-bar">
-        <button class="chip" :class="{ on: scope === '' }" @click="scope = ''; refreshScopeStats()">全部文档</button>
-        <button v-for="g in groups" :key="g" class="chip" :class="{ on: scope === g }" @click="scope = g; refreshScopeStats()">{{ g }}</button>
-        <span v-if="groups.length === 0" style="color:var(--text-faint);font-size:12px">暂无分组 — 到文档库给文档设置分组后可聚焦分析</span>
+        <button class="chip" :class="{ on: scope === 'all' }" @click="scope = 'all'; refreshScopeStats()">全部文档</button>
+        <button class="chip" :class="{ on: scope === 'none' }" @click="scope = 'none'; refreshScopeStats()">未分组</button>
+        <button v-for="g in groups" :key="g.id" class="chip" :class="{ on: scope === g.id }" @click="scope = g.id; refreshScopeStats()">{{ g.name }} {{ g.doc_count }}</button>
+        <span v-if="groups.length === 0" style="color:var(--text-faint);font-size:12px">暂无分组 — 到文档库新建分组并移入文档后可聚焦分析</span>
       </div>
       <div v-if="analyzing" style="color:var(--text-faint);font-size:13px;padding:10px 0">正在分析{{ scopeLabel }}（约 30–90 秒）…</div>
       <div v-else-if="result" class="scroll-limit"><div class="md-render" v-html="renderedResult"></div></div>
@@ -129,7 +138,7 @@ async function runAnalysis() {
       </div>
       <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
         <button class="btn btn-primary" :disabled="analyzing" @click="runAnalysis">
-          <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 15l4-6 3 4 5-7" /></svg>{{ analyzing ? "分析中…" : (scope ? "开始分析该分组" : "重新分析全部") }}
+          <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 15l4-6 3 4 5-7" /></svg>{{ analyzing ? "分析中…" : (scope !== 'all' ? "开始分析该范围" : "重新分析全部") }}
         </button>
         <button class="btn btn-ghost" @click="toast('增量分析将在 P3 接入')">仅分析新增</button>
       </div>
