@@ -76,6 +76,11 @@ input,select,textarea{font-family:inherit;color:inherit}
 .doc-chip{display:inline-flex;align-items:center;gap:6px;padding-right:8px}
 .doc-chip-x{background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;border-radius:4px}
 .doc-chip-x:hover{background:rgba(0,0,0,.15)}
+/* 通用表格（设置页价格表等复用） */
+.shot-table{width:100%;border-collapse:collapse;font-size:13px}
+.shot-table th,.shot-table td{border:1px solid rgba(255,255,255,.08);padding:6px 8px;text-align:left;vertical-align:top}
+.shot-table th{color:var(--text-muted);background:rgba(255,255,255,.04);white-space:nowrap}
+.price-panel{border:1px solid rgba(232,179,106,.3);border-radius:10px;background:rgba(232,179,106,.05);padding:10px 12px;margin-top:10px}
 .btn-danger-ghost{background:transparent;border-color:var(--border);color:var(--red)}
 .btn-danger-ghost:hover{background:var(--red-soft);border-color:transparent}
 .btn-sm{padding:5px 11px;font-size:12.5px}

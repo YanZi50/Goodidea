@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, inject } from "vue";
-import { dbStatus } from "../lib/db";
+import { dbStatus, listBillingRules, upsertBillingRule } from "../lib/db";
 import {
   loadAIConfig,
   saveAIConfig,
   clearAIConfig,
   DEFAULT_CONFIG,
+  PRICE_TABLE,
+  reloadPriceTable,
   type AIConfig,
 } from "../lib/ai";
 
@@ -46,6 +48,63 @@ function clear() {
   configured.value = false;
   cfg.value = { ...DEFAULT_CONFIG };
   toast("已清除模型配置");
+}
+
+// ---- 价格表（billing_rules 可维护；db 优先，常量兜底） ----
+const priceOpen = ref(false);
+const priceRows = ref<{ model: string; inP: number; outP: number }[]>([]);
+const priceLoading = ref(false);
+const priceSaving = ref(false);
+const priceSource = ref("db"); // db / default
+
+async function openPrice() {
+  priceOpen.value = !priceOpen.value;
+  if (!priceOpen.value) return;
+  priceLoading.value = true;
+  try {
+    const rules = await listBillingRules();
+    if (rules && rules.length > 0) {
+      priceRows.value = rules.map((r) => ({ model: r.model, inP: r.input_price, outP: r.output_price }));
+      priceSource.value = "db";
+    } else {
+      priceRows.value = Object.entries(PRICE_TABLE).map(([model, p]) => ({ model, inP: p.in, outP: p.out }));
+      priceSource.value = "default";
+    }
+  } catch {
+    priceRows.value = Object.entries(PRICE_TABLE).map(([model, p]) => ({ model, inP: p.in, outP: p.out }));
+    priceSource.value = "default";
+  } finally {
+    priceLoading.value = false;
+  }
+}
+
+function priceAddRow() {
+  priceRows.value.push({ model: "", inP: 0, outP: 0 });
+}
+
+function priceRemoveRow(i: number) {
+  priceRows.value.splice(i, 1);
+}
+
+async function priceSave() {
+  const bad = priceRows.value.find((r) => !r.model.trim() || r.inP < 0 || r.outP < 0);
+  if (bad) {
+    toast("存在未命名或负数价格的条目，请修正");
+    return;
+  }
+  priceSaving.value = true;
+  try {
+    for (const r of priceRows.value) {
+      await upsertBillingRule(r.model.trim(), Number(r.inP), Number(r.outP));
+    }
+    await reloadPriceTable();
+    priceSource.value = "db";
+    toast(`价格表已保存（${priceRows.value.length} 条，计算即时生效）`);
+  } catch (err) {
+    toast(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    priceSaving.value = false;
+  }
 }
 </script>
 
@@ -113,12 +172,36 @@ function clear() {
     </div>
 
     <div class="card">
-      <div class="card-title">偏好设置 <span class="hint">P2 落地</span></div>
+      <div class="card-title">计费价格表 <span class="hint">可维护 · db 优先</span></div>
       <div style="color:var(--text-muted);font-size:13.5px">
-        模型默认值、热点源选择、价格表维护将在此面板进一步落地。
+        每条规则按模型名匹配（包含即命中），单位：元 / 百万 token。保存在 SQLite（billing_rules），未配置时用内置默认价格。
+        <span v-if="priceSource === 'db'" style="color:var(--green)">　当前：数据库价格</span>
+        <span v-else style="color:var(--text-faint)">　当前：内置默认价格</span>
       </div>
-      <div style="margin-top:14px;display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" @click="toast('价格表编辑在 P2 接入（当前为常量价格表）')">价格表</button>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" @click="openPrice">{{ priceOpen ? "收起" : "编辑价格表" }}</button>
+        <span style="font-size:12px;color:var(--text-faint);align-self:center">模型调价 / 新增模型在此维护，无需改代码</span>
+      </div>
+      <div v-if="priceOpen" class="price-panel">
+        <div v-if="priceLoading" style="font-size:13px;color:var(--text-faint);padding:8px 0">加载中…</div>
+        <template v-else>
+          <table class="shot-table" style="margin-top:8px">
+            <thead><tr><th>模型（匹配前缀）</th><th>输入价</th><th>输出价</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="(r, i) in priceRows" :key="i">
+                <td><input class="input" style="width:100%;padding:4px 8px" v-model="r.model" placeholder="如 deepseek-v4-flash" /></td>
+                <td><input class="input" type="number" min="0" step="0.01" style="width:90px;padding:4px 8px" v-model.number="r.inP" /></td>
+                <td><input class="input" type="number" min="0" step="0.01" style="width:90px;padding:4px 8px" v-model.number="r.outP" /></td>
+                <td><button class="icon-btn" title="删除" @click="priceRemoveRow(i)"><svg viewBox="0 0 24 24"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></svg></button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" @click="priceAddRow">+ 添加模型</button>
+            <button class="btn btn-primary btn-sm" :disabled="priceSaving" @click="priceSave">{{ priceSaving ? "保存中…" : "保存价格表" }}</button>
+            <span style="font-size:12px;color:var(--text-faint);align-self:center">保存后消耗统计 / 顶栏今日消耗即时按新价计算</span>
+          </div>
+        </template>
       </div>
     </div>
   </div>

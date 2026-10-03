@@ -278,3 +278,34 @@ export async function listAllChunkContent(limit = 60, docIds?: number[]): Promis
     return [];
   }
 }
+
+// ---- 价格表（billing_rules，v3） ----
+export interface BillingRule {
+  model: string;
+  input_price: number;
+  output_price: number;
+  updated_at: string;
+}
+
+/** 读取全部价格规则；web 预览或 db 不可用时返回 null */
+export async function listBillingRules(): Promise<BillingRule[] | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const d = await getDb();
+    return await d.select<BillingRule[]>("SELECT model, input_price, output_price, updated_at FROM billing_rules ORDER BY model");
+  } catch (err) {
+    console.error("[db] listBillingRules failed", err);
+    return null;
+  }
+}
+
+/** 写入（存在则更新）一条价格规则 */
+export async function upsertBillingRule(model: string, inputPrice: number, outputPrice: number): Promise<void> {
+  if (!isTauriRuntime()) return;
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO billing_rules (model, input_price, output_price, updated_at) VALUES ($1, $2, $3, $4) " +
+      "ON CONFLICT(model) DO UPDATE SET input_price = $2, output_price = $3, updated_at = $4",
+    [model, inputPrice, outputPrice, new Date().toISOString()]
+  );
+}

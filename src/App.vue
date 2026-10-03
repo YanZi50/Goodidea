@@ -8,6 +8,7 @@ import StudioView from "./views/StudioView.vue";
 import HotspotView from "./views/HotspotView.vue";
 import UsageView from "./views/UsageView.vue";
 import SettingsView from "./views/SettingsView.vue";
+import { reloadPriceTable } from "./lib/ai";
 
 const TITLES: Record<string, [string, string]> = {
   library: ["文档库", "所有喂给 Goodidea 的材料都沉淀在这里"],
@@ -39,6 +40,8 @@ function navigate(id: string) {
 }
 
 onMounted(() => {
+  // 启动时加载可维护价格表（billing_rules；db 不可用时静默回退常量）
+  void reloadPriceTable();
   const sync = () => {
     const hash = location.hash.replace("#", "");
     activeView.value = TITLES[hash] ? hash : "library";

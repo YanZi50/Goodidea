@@ -2,6 +2,7 @@
 // 配置存 localStorage（仅本机浏览器存储，不入库、不入 git）；P2 起价格表迁入 billing_rules 表
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, streamText } from "ai";
+import { listBillingRules } from "./db";
 
 export interface AIConfig {
   label: string; // 显示名（消耗统计按此归组）
@@ -81,10 +82,10 @@ export async function streamGeneration(cfg: AIConfig, system: string, prompt: st
   return streamText({ model, system, prompt, providerOptions: { openai: thinkingOptions(cfg) } });
 }
 
-// ---------- 计费（P1 常量价格表；P2 迁入 billing_rules 数据表） ----------
+// ---------- 计费（默认常量价格表；设置页可维护，db 优先覆盖） ----------
 
-const PRICE_TABLE: Record<string, { in: number; out: number }> = {
-  // 单位：元 / 百万 token；来源：官方定价页（2026-09 快照），峰谷时段/优惠可能有差异，P2 迁入 billing_rules 数据表维护
+export const PRICE_TABLE: Record<string, { in: number; out: number }> = {
+  // 单位：元 / 百万 token；来源：官方定价页（2026-09 快照），峰谷时段/优惠可能有差异；设置页「价格表」可维护（billing_rules）
   // 注意：deepseek-v4 思考模式下 reasoning tokens 计入输出 token，按输出价计费（输出偏贵）；关闭思考更省
   "deepseek-v4-flash": { in: 1, out: 2 },
   "deepseek-chat": { in: 1, out: 2 }, // 旧名兼容映射（弃用后等价 v4-flash 非思考模式）
@@ -94,11 +95,35 @@ const PRICE_TABLE: Record<string, { in: number; out: number }> = {
   "claude-sonnet-4": { in: 1.6, out: 8 },
 };
 
+// 动态价格表：db（billing_rules）加载后覆盖常量；未加载时用常量
+let dynamicPrice: Record<string, { in: number; out: number }> | null = null;
+
+/** 从 db 重载价格表（设置页保存后 / 应用启动时调用；web 预览或 db 不可用时回退常量） */
+export async function reloadPriceTable(): Promise<void> {
+  try {
+    const rules = await listBillingRules();
+    if (rules === null) {
+      dynamicPrice = null;
+      return;
+    }
+    dynamicPrice = {};
+    for (const r of rules) dynamicPrice[r.model] = { in: r.input_price, out: r.output_price };
+  } catch {
+    dynamicPrice = null;
+  }
+}
+
+/** 当前生效的价格表（db 优先，常量兜底） */
+export function currentPriceTable(): Record<string, { in: number; out: number }> {
+  return dynamicPrice ?? PRICE_TABLE;
+}
+
 export function priceFor(modelLabel: string): { in: number; out: number } {
-  for (const [name, price] of Object.entries(PRICE_TABLE)) {
+  const table = currentPriceTable();
+  for (const [name, price] of Object.entries(table)) {
     if (modelLabel.includes(name)) return price;
   }
-  return { in: 0, out: 0 }; // 未收录模型默认免费显示，P2 由价格表接管
+  return { in: 0, out: 0 }; // 未收录模型默认免费显示
 }
 
 export interface CostResult {
