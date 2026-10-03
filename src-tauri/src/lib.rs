@@ -42,6 +42,17 @@ pub fn run() {
               ALTER TABLE documents ADD COLUMN group_id INTEGER;",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "create_billing_rules",
+            sql: "CREATE TABLE IF NOT EXISTS billing_rules (
+                model TEXT PRIMARY KEY,
+                input_price REAL NOT NULL,
+                output_price REAL NOT NULL,
+                updated_at TEXT NOT NULL
+              );",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
