@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, inject, onMounted } from "vue";
-import type { DocumentRow } from "../lib/db";
+import type { DocumentRow, GroupRow } from "../lib/db";
 import {
   listDocuments,
   countChunks,
   deleteDocument,
   deleteDocuments,
-  updateDocumentTags,
   listGroups,
-  parseTags,
+  createGroup,
+  deleteGroup,
+  setDocumentGroup,
+  setDocumentsGroup,
 } from "../lib/db";
 import { ingestFile } from "../lib/ingest";
 
@@ -21,17 +23,18 @@ const importing = ref(false);
 const keyword = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 
-// ---- 分组 ----
-const groups = ref<string[]>([]);
-const groupFilter = ref(""); // "" = 全部
-const editingId = ref<number | null>(null); // 行内分组编辑器展开的文档 id
-const editTags = ref<string[]>([]);
-const newTag = ref("");
+// ---- 分组（groups 表实体，组间互不干涉） ----
+const groups = ref<GroupRow[]>([]);
+const groupFilter = ref<"all" | "none" | number>("all"); // all=全部跨组 / none=未分组 / number=组 id
+const creatingGroup = ref(false);
+const newGroupName = ref("");
+const editingId = ref<number | null>(null); // 行内移组展开的文档 id
+const editGroupId = ref<number | null>(null);
 
 // ---- 批量选择 ----
 const selected = ref<Set<number>>(new Set());
-const batchTag = ref("");
-const batchNewTag = ref("");
+const batchGroup = ref<number | "">("");
+const targetGroup = ref<number | "">(""); // 导入时归属组
 
 async function refresh() {
   docs.value = await listDocuments();
@@ -41,16 +44,26 @@ async function refresh() {
   // 清理失效的选择/筛选
   const valid = new Set(docs.value.map((d) => d.id));
   selected.value = new Set([...selected.value].filter((id) => valid.has(id)));
-  if (groupFilter.value && !groups.value.includes(groupFilter.value)) groupFilter.value = "";
+  if (typeof groupFilter.value === "number" && !groups.value.some((g) => g.id === groupFilter.value)) {
+    groupFilter.value = "all";
+  }
 }
 
 onMounted(refresh);
+
+const ungroupedCount = computed(() => docs.value.filter((d) => d.group_id === null).length);
+
+function groupName(id: number | null): string {
+  if (id === null) return "未分组";
+  return groups.value.find((g) => g.id === id)?.name ?? "未分组";
+}
 
 const filtered = computed(() => {
   let list = docs.value;
   const q = keyword.value.trim().toLowerCase();
   if (q) list = list.filter((d) => d.filename.toLowerCase().includes(q));
-  if (groupFilter.value) list = list.filter((d) => parseTags(d.tags).includes(groupFilter.value));
+  if (groupFilter.value === "none") list = list.filter((d) => d.group_id === null);
+  else if (typeof groupFilter.value === "number") list = list.filter((d) => d.group_id === groupFilter.value);
   return list;
 });
 
@@ -99,70 +112,82 @@ async function removeSelected() {
   }
 }
 
-// ---- 行内分组编辑 ----
+// ---- 创建 / 删除组 ----
+async function createGroupSubmit() {
+  const name = newGroupName.value.trim();
+  if (!name) {
+    toast("请输入分组名称");
+    return;
+  }
+  try {
+    const id = await createGroup(name);
+    toast(`已创建分组「${name}」`);
+    newGroupName.value = "";
+    creatingGroup.value = false;
+    groupFilter.value = id;
+    await refresh();
+  } catch (err) {
+    toast(`创建失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function removeGroup(g: GroupRow) {
+  const confirmed = window.confirm(`删除分组「${g.name}」？组内 ${g.doc_count} 篇文档将移回「未分组」，文档本身不删除。`);
+  if (!confirmed) return;
+  try {
+    await deleteGroup(g.id);
+    toast(`已删除分组「${g.name}」`);
+    if (groupFilter.value === g.id) groupFilter.value = "all";
+    await refresh();
+  } catch (err) {
+    toast(`删除分组失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ---- 行内移组 ----
 function openEditor(d: DocumentRow) {
   editingId.value = d.id;
-  editTags.value = [...parseTags(d.tags)];
-  newTag.value = "";
-}
-
-function toggleEditTag(t: string) {
-  const i = editTags.value.indexOf(t);
-  if (i >= 0) editTags.value.splice(i, 1);
-  else editTags.value.push(t);
-}
-
-function addNewTag() {
-  const t = newTag.value.trim();
-  if (!t) return;
-  if (!editTags.value.includes(t)) editTags.value.push(t);
-  newTag.value = "";
+  editGroupId.value = d.group_id;
 }
 
 async function saveEditor(d: DocumentRow) {
   try {
-    await updateDocumentTags(d.id, [...new Set(editTags.value)]);
-    toast(`已更新分组：${d.filename}`);
+    await setDocumentGroup(d.id, editGroupId.value);
+    toast(editGroupId.value === null ? `已移出分组：${d.filename}` : `已移入「${groupName(editGroupId.value)}」：${d.filename}`);
     editingId.value = null;
     await refresh();
   } catch (err) {
-    toast(`分组更新失败：${err instanceof Error ? err.message : String(err)}`);
+    toast(`移组失败：${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-// ---- 批量设置分组 ----
-async function applyBatchTag() {
+// ---- 批量移入 / 移出分组 ----
+async function applyBatchGroup() {
   const ids = [...selected.value];
-  const tag = (batchTag.value || batchNewTag.value).trim();
-  if (ids.length === 0 || !tag) {
-    toast("请先选择或输入分组名");
+  const gid = batchGroup.value;
+  if (ids.length === 0 || gid === "") {
+    toast("请先勾选文档并选择目标分组");
     return;
   }
   try {
-    for (const id of ids) {
-      const d = docs.value.find((x) => x.id === id);
-      const tags = new Set(parseTags(d?.tags ?? null));
-      tags.add(tag);
-      await updateDocumentTags(id, [...tags]);
-    }
-    toast(`已将 ${ids.length} 篇文档加入分组「${tag}」`);
-    batchTag.value = "";
-    batchNewTag.value = "";
+    await setDocumentsGroup(ids, gid);
+    toast(`已将 ${ids.length} 篇文档移入「${groupName(gid)}」`);
+    batchGroup.value = "";
     await refresh();
   } catch (err) {
-    toast(`批量分组失败：${err instanceof Error ? err.message : String(err)}`);
+    toast(`批量移组失败：${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-async function clearSelectedTags() {
+async function ungroupSelected() {
   const ids = [...selected.value];
   if (ids.length === 0) return;
   try {
-    for (const id of ids) await updateDocumentTags(id, []);
-    toast(`已清除 ${ids.length} 篇文档的分组`);
+    await setDocumentsGroup(ids, null);
+    toast(`已将 ${ids.length} 篇文档移出分组`);
     await refresh();
   } catch (err) {
-    toast(`清除失败：${err instanceof Error ? err.message : String(err)}`);
+    toast(`移出失败：${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -176,11 +201,12 @@ async function handleFiles(files: FileList | File[]) {
   const list = Array.from(files);
   if (list.length === 0) return;
   importing.value = true;
+  const gid = targetGroup.value === "" ? null : targetGroup.value;
   let ok = 0;
   let dup = 0;
   let errs = 0;
   for (const f of list) {
-    const r = await ingestFile(f);
+    const r = await ingestFile(f, gid);
     if (r.status === "inserted") {
       ok++;
       toast(`已入库：${f.name}（${r.chunks} 块）`);
@@ -234,16 +260,30 @@ function onDrop(e: DragEvent) {
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>
         <input class="input" v-model="keyword" placeholder="搜索文件名…" />
       </div>
+      <select class="select" v-model="targetGroup" style="width:150px" title="导入时直接归入所选分组">
+        <option value="">导入到：未分组</option>
+        <option v-for="g in groups" :key="g.id" :value="g.id">导入到：{{ g.name }}</option>
+      </select>
       <button class="btn btn-ghost" @click="toast('粘贴文本入库即将开放（P1 二期）')">粘贴文本</button>
       <button class="btn btn-primary" :disabled="importing" @click="fileInput?.click()">
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>{{ importing ? "导入中…" : "批量导入" }}
       </button>
     </div>
 
-    <!-- 分组筛选 -->
-    <div class="group-filter" v-if="groups.length > 0">
-      <button class="chip" :class="{ on: groupFilter === '' }" @click="groupFilter = ''">全部</button>
-      <button v-for="g in groups" :key="g" class="chip" :class="{ on: groupFilter === g }" @click="groupFilter = g">{{ g }}</button>
+    <!-- 组导航：全部（跨组总览）/ 未分组 / 各组 / 新建组 -->
+    <div class="group-nav">
+      <button class="chip" :class="{ on: groupFilter === 'all' }" @click="groupFilter = 'all'">全部 {{ docs.length }}</button>
+      <button class="chip" :class="{ on: groupFilter === 'none' }" @click="groupFilter = 'none'">未分组 {{ ungroupedCount }}</button>
+      <span v-for="g in groups" :key="g.id" class="g-chip-wrap">
+        <button class="chip g-chip" :class="{ on: groupFilter === g.id }" @click="groupFilter = g.id">{{ g.name }} {{ g.doc_count }}</button>
+        <button class="g-del" title="删除分组（组内文档移回未分组）" @click.stop="removeGroup(g)">×</button>
+      </span>
+      <template v-if="creatingGroup">
+        <input class="input g-new-input" v-model="newGroupName" placeholder="分组名称…" @keydown.enter="createGroupSubmit" />
+        <button class="btn btn-primary btn-sm" @click="createGroupSubmit">创建</button>
+        <button class="btn btn-ghost btn-sm" @click="creatingGroup = false; newGroupName = ''">取消</button>
+      </template>
+      <button v-else class="btn btn-ghost btn-sm" @click="creatingGroup = true">+ 新建组</button>
     </div>
 
     <div class="card" style="padding:0;overflow:hidden">
@@ -255,22 +295,21 @@ function onDrop(e: DragEvent) {
         </span>
         <div class="tbl-bar-actions">
           <button class="btn btn-danger btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '删除选中文档'" @click="removeSelected">删除</button>
-          <button class="btn btn-ghost btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '清除选中文档的分组'" @click="clearSelectedTags">清除分组</button>
+          <button class="btn btn-ghost btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '移出分组（回到未分组）'" @click="ungroupSelected">移出分组</button>
           <button v-if="selected.size > 0" class="btn btn-ghost btn-sm" @click="selected = new Set()">取消</button>
         </div>
       </div>
-      <!-- 第二行：常驻分组编辑槽位（固定高度，勾选/展开均不推挤表格） -->
+      <!-- 第二行：常驻移组槽位（固定高度，零布局跳动） -->
       <div class="tbl-bar-tags">
         <template v-if="selected.size > 0">
-          <span class="tag-editor-label">加入分组：</span>
-          <select class="select" v-model="batchTag">
-            <option value="">选择已有分组…</option>
-            <option v-for="g in groups" :key="g" :value="g">{{ g }}</option>
+          <span class="tag-editor-label">移入分组：</span>
+          <select class="select" v-model="batchGroup">
+            <option value="">选择目标分组…</option>
+            <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
           </select>
-          <input class="input" v-model="batchNewTag" placeholder="或输入新分组名…" @keydown.enter="applyBatchTag" />
-          <button class="btn btn-primary btn-sm" @click="applyBatchTag">应用</button>
+          <button class="btn btn-primary btn-sm" @click="applyBatchGroup">应用</button>
         </template>
-        <span v-else class="tag-editor-label" style="color:var(--text-faint)">勾选文档后，可在这里批量设置 / 新建分组</span>
+        <span v-else class="tag-editor-label" style="color:var(--text-faint)">勾选文档后，可在这里批量移入 / 移出分组</span>
       </div>
       <div class="scroll-limit">
         <table class="tbl">
@@ -292,14 +331,12 @@ function onDrop(e: DragEvent) {
             <td>{{ d.size ? (d.size / 1024).toFixed(1) + " KB" : "—" }}</td>
             <td style="color:var(--text-muted);font-size:12.5px">{{ d.created_at }}</td>
             <td>
-              <div style="display:flex;gap:5px;flex-wrap:wrap">
-                <span v-for="t in parseTags(d.tags)" :key="t" class="tag gold">{{ t }}</span>
-                <span v-if="parseTags(d.tags).length === 0" style="color:var(--text-faint);font-size:12px">未分组</span>
-              </div>
+              <span v-if="d.group_id !== null" class="tag gold">{{ groupName(d.group_id) }}</span>
+              <span v-else style="color:var(--text-faint);font-size:12px">未分组</span>
             </td>
             <td>
               <div class="row-actions">
-                <button class="icon-btn" title="分组" @click="editingId === d.id ? (editingId = null) : openEditor(d)">
+                <button class="icon-btn" title="移入/移出分组" @click="editingId === d.id ? (editingId = null) : openEditor(d)">
                   <svg viewBox="0 0 24 24"><path d="M7 7h10M7 12h10M7 17h6" /></svg>
                 </button>
                 <button class="icon-btn" title="分析" @click="toast('单篇分析将在 P3 接入')">
@@ -311,15 +348,16 @@ function onDrop(e: DragEvent) {
               </div>
             </td>
           </tr>
-          <!-- 行内分组编辑器 -->
+          <!-- 行内移组编辑器 -->
           <tr v-if="editingId !== null && filtered.some((d) => d.id === editingId)" :key="'edit-' + editingId" class="tag-editor-row">
             <td></td>
             <td colspan="6">
               <div class="tag-editor">
-                <span class="tag-editor-label">分组：</span>
-                <span v-for="g in groups" :key="g" class="chip" :class="{ on: editTags.includes(g) }" @click="toggleEditTag(g)">{{ g }}</span>
-                <span v-if="groups.length === 0" style="color:var(--text-faint);font-size:12px">暂无分组，输入新建</span>
-                <input class="input" style="width:150px" v-model="newTag" placeholder="新建分组…" @keydown.enter="addNewTag" />
+                <span class="tag-editor-label">归属组：</span>
+                <select class="select" v-model="editGroupId" style="width:180px">
+                  <option :value="null">未分组</option>
+                  <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+                </select>
                 <button class="btn btn-primary btn-sm" @click="saveEditor(filtered.find((d) => d.id === editingId)!)">保存</button>
                 <button class="btn btn-ghost btn-sm" @click="editingId = null">取消</button>
               </div>
@@ -327,7 +365,7 @@ function onDrop(e: DragEvent) {
           </tr>
           <tr v-if="filtered.length === 0 && !loading">
             <td colspan="7" style="text-align:center;color:var(--text-faint);padding:26px">
-              {{ keyword || groupFilter ? "没有匹配的文档" : "还没有文档 — 拖入 .txt / .md / .docx 开始建立知识库" }}
+              {{ keyword || groupFilter !== 'all' ? "没有匹配的文档" : "还没有文档 — 拖入 .txt / .md / .docx 开始建立知识库" }}
             </td>
           </tr>
         </tbody>
@@ -353,20 +391,31 @@ function onDrop(e: DragEvent) {
       </div>
       <div class="card">
         <div class="card-title">分组 <span class="hint">{{ groups.length }} 个</span></div>
-        <div style="font-size:12.5px;color:var(--text-muted)">按品牌 / 频道 / 日期分组，智能分析可按组聚焦</div>
-        <div class="cluster"><span v-for="g in groups.slice(0, 5)" :key="g" class="tag gold">{{ g }}</span><span v-if="groups.length === 0" class="tag">暂无</span></div>
+        <div style="font-size:12.5px;color:var(--text-muted)">组间互不干涉，智能分析可按组聚焦</div>
+        <div class="cluster">
+          <span v-for="g in groups.slice(0, 5)" :key="g.id" class="tag gold">{{ g.name }} {{ g.doc_count }}</span>
+          <span v-if="groups.length === 0" class="tag">暂无</span>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.group-filter { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
+.group-nav { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0 12px; }
 .chip {
   border: 1px solid var(--surface-2); background: transparent; color: var(--text-muted);
   border-radius: 999px; padding: 4px 12px; font-size: 12.5px; cursor: pointer;
 }
 .chip.on { background: var(--accent); color: #0b0e13; border-color: var(--accent); }
+.g-chip-wrap { position: relative; display: inline-flex; }
+.g-del {
+  position: absolute; right: -5px; top: -7px; width: 16px; height: 16px; line-height: 14px;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0; text-align: center;
+}
+.g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+.g-new-input { width: 140px; padding: 5px 10px; }
 .tbl-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 14px; border-bottom: 1px solid var(--surface-2);
@@ -388,5 +437,4 @@ tr.sel td { background: rgba(232, 179, 106, 0.06); }
 .tag-editor-row td { border-top: 1px dashed var(--surface-2); }
 .tag-editor { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 0; }
 .tag-editor-label { color: var(--text-muted); font-size: 12.5px; }
-.tag-editor .input { width: 150px; }
 </style>
