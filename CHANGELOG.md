@@ -99,6 +99,6 @@
 - 验证：cargo check 通过（迁移 v3 编译通过）、vue-tsc + vite build 全绿（399 模块，动态 import 警告已消除）；设置页经 HTTP 通道渲染 0 布局溢出；真机保存/重算流程待确认（@3b2ab7a）
 
 ### Changed（P3 UX：窗口铺满 + 左下角亮暗滑块）
-- **窗口铺满**：启动默认 1440×900 且 `maximized: true`（启动即最大化铺满屏幕，可手动还原）；生成工作台等页面随窗口变宽自动铺满（@待回填）
-- **左下角亮暗滑块**：侧栏底部（帮助/导出上方）新增亮度滑块（0.6–1.6，默认 1），拖拽即时调节整页明暗（CSS `filter: brightness()`），值持久化到 localStorage 下次启动沿用（@待回填）
-- 验证：vue-tsc + vite build 全绿（399 模块）；Edge headless 直连截图确认 #analysis/#hotspot 路由正常、滑块渲染、0 布局溢出；shot.py 降级模式截图视图错位已记 BUG-010，视觉核对改走 Edge 直连（@待回填）
+- **窗口铺满**：启动默认 1440×900 且 `maximized: true`（启动即最大化铺满屏幕，可手动还原）；生成工作台等页面随窗口变宽自动铺满（@234f3ed）
+- **左下角亮暗滑块**：侧栏底部（帮助/导出上方）新增亮度滑块（0.6–1.6，默认 1），拖拽即时调节整页明暗（CSS `filter: brightness()`），值持久化到 localStorage 下次启动沿用（@234f3ed）
+- 验证：vue-tsc + vite build 全绿（399 模块）；Edge headless 直连截图确认 #analysis/#hotspot 路由正常、滑块渲染、0 布局溢出；shot.py 降级模式截图视图错位已记 BUG-010，视觉核对改走 Edge 直连（@234f3ed）
