@@ -89,6 +89,18 @@
 
 ---
 
+## BUG-008：vite rolldown 分包后 file:// 内联验证法失效（chunk 相对 import 被 CORS 拦）
+
+- **日期**：2026-10-03
+- **关联 commit**：（修复中，见 @hash）
+- **所属模块**：验证通道（ui-mockup/_shots/tpl/inline_dist.py）
+- **症状**：加入 manualChunks 分包后，inline_dist.py 生成的内联单文件在 file:// 下渲染，全部 chunk 报 `Access to script at 'file:///.../vendor-*.js' has been blocked by CORS policy`（modulepreload 链接与 chunk 相对 import 均被拦，consoleErrors 高达 20）。
+- **根因**：① rolldown 产物在 index.html 中输出 `<link rel="modulepreload">` 预加载链接，file:// origin null 下被 CORS 拦截；删除后仍有 `dist/rolldown-runtime-*.js` 等**无 assets/ 前缀的相对 import**（chunk 间引用），内联单文件无法覆盖；② 此前单 chunk 产物无 modulepreload、无 chunk 相对引用，内联法才可用。
+- **解决**：验证通道切换为「本机 HTTP 服务 + shot.py URL 模式」：`python -m http.server 8765 --directory dist` 后台起服 → `shot.py "http://127.0.0.1:8765/index.html#<frag>"`（输出到 `%TEMP%\..\_shots` 即 D:\Myfolder\doubao\_shots，注意 outdir 与 file:// 模式不同）。HTTP 通道下 chunk 加载正常，Tauri 真机（自定义协议加载 dist）同样无此问题。
+- **预防**：① 引入任何 chunk 化（manualChunks / dynamic import）后，file:// 内联验证法不再可靠，统一走 HTTP 通道；② 渲染产物多 chunk 时不要尝试修补 inline 工具适配 chunk（代价高且脆），直接换通道；③ 本机 HTTP 服务端口 8765 固定用于验证（脚本模式记录在 tpl 目录注释）。
+
+---
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。
