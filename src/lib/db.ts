@@ -141,12 +141,18 @@ export async function insertChunk(c: { doc_id: number; seq: number; content: str
   ]);
 }
 
-/** 文档分块总数 */
-export async function countChunks(): Promise<number | null> {
+/** 文档分块总数（可选按文档范围） */
+export async function countChunks(docIds?: number[]): Promise<number | null> {
   if (!isTauriRuntime()) return null;
   try {
     const d = await getDb();
-    const rows = await d.select<{ n: number }[]>("SELECT COUNT(*) AS n FROM chunks");
+    let sql = "SELECT COUNT(*) AS n FROM chunks";
+    const params: unknown[] = [];
+    if (docIds && docIds.length > 0) {
+      sql += ` WHERE doc_id IN (${docIds.map((_, i) => `$${i + 1}`).join(",")})`;
+      params.push(...docIds);
+    }
+    const rows = await d.select<{ n: number }[]>(sql, params);
     return rows[0]?.n ?? 0;
   } catch (err) {
     console.error("[db] countChunks failed", err);
@@ -161,15 +167,64 @@ export async function deleteDocument(id: number): Promise<void> {
   await d.execute("DELETE FROM documents WHERE id = $1", [id]);
 }
 
-/** 全库内容（按文档/块序拼接，供全库分析；limit 截断防止超长 prompt） */
-export async function listAllChunkContent(limit = 60): Promise<string[]> {
+/** 批量删除文档（chunks 级联 + 文档，单事务语义：先删块再删文档） */
+export async function deleteDocuments(ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  const d = await getDb();
+  const ph = ids.map((_, i) => `$${i + 1}`).join(",");
+  await d.execute(`DELETE FROM chunks WHERE doc_id IN (${ph})`, ids);
+  await d.execute(`DELETE FROM documents WHERE id IN (${ph})`, ids);
+}
+
+/** 更新文档分组标签（tags 存 JSON 数组字符串，如 ["抖音","名表"]） */
+export async function updateDocumentTags(id: number, tags: string[]): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE documents SET tags = $1 WHERE id = $2", [JSON.stringify(tags), id]);
+}
+
+/** 解析 tags 字段（null / 空 / 非法 JSON → 空数组） */
+export function parseTags(tags: string | null): string[] {
+  if (!tags) return [];
+  try {
+    const v = JSON.parse(tags);
+    return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 全部分组名（跨文档去重，按中文排序） */
+export async function listGroups(): Promise<string[]> {
   if (!isTauriRuntime()) return [];
   try {
     const d = await getDb();
-    const rows = await d.select<{ content: string }[]>(
-      "SELECT content FROM chunks ORDER BY doc_id, seq LIMIT $1",
-      [limit]
-    );
+    const rows = await d.select<{ tags: string | null }[]>("SELECT DISTINCT tags FROM documents");
+    const set = new Set<string>();
+    for (const r of rows) for (const t of parseTags(r.tags)) set.add(t);
+    return [...set].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  } catch (err) {
+    console.error("[db] listGroups failed", err);
+    return [];
+  }
+}
+
+/** 全库内容（可选按文档范围；按文档/块序拼接，limit 截断防止超长 prompt） */
+export async function listAllChunkContent(limit = 60, docIds?: number[]): Promise<string[]> {
+  if (!isTauriRuntime()) return [];
+  try {
+    const d = await getDb();
+    let sql = "SELECT content FROM chunks";
+    const params: unknown[] = [];
+    if (docIds && docIds.length > 0) {
+      sql += ` WHERE doc_id IN (${docIds.map((_, i) => `$${i + 1}`).join(",")})`;
+      params.push(...docIds);
+      sql += ` ORDER BY doc_id, seq LIMIT $${docIds.length + 1}`;
+      params.push(limit);
+    } else {
+      sql += " ORDER BY doc_id, seq LIMIT $1";
+      params.push(limit);
+    }
+    const rows = await d.select<{ content: string }[]>(sql, params);
     return rows.map((r) => r.content);
   } catch (err) {
     console.error("[db] listAllChunkContent failed", err);
