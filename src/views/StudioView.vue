@@ -241,7 +241,7 @@ function copyShots() {
     </div>
     <div class="card">
       <div class="panel-head"><span class="ph-t">输出</span><span class="ph-h">流式渲染 · 实时消耗</span></div>
-      <div class="out-area scroll-limit-sm" :class="{ empty: !output && !generating }">
+      <div class="out-area" :class="{ empty: !output && !generating }">
         <template v-if="output || generating">
           <div class="out-line" style="white-space:pre-wrap">{{ output }}<span v-if="generating" class="cursor"></span></div>
         </template>

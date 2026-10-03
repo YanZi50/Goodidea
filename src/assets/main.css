@@ -161,7 +161,7 @@ table.tbl tr:hover .row-actions{opacity:1}
 .issue .ref{font-size:11px;color:var(--text-faint);margin-top:5px;display:flex;gap:6px;flex-wrap:wrap}
 .cluster{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 /* ===== 生成工作台 ===== */
-.studio{display:grid;grid-template-columns:minmax(300px,2fr) minmax(320px,3fr);gap:14px;align-items:start}
+.studio{display:grid;grid-template-columns:minmax(320px,3fr) minmax(380px,5fr);gap:14px;align-items:start}
 .panel-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .panel-head .ph-t{font-weight:700;font-size:14px}
 .panel-head .ph-h{margin-left:auto;font-size:11.5px;color:var(--text-faint)}
@@ -170,7 +170,7 @@ table.tbl tr:hover .row-actions{opacity:1}
 .chip{padding:6px 13px;border-radius:20px;font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;transition:all .14s}
 .chip:hover{border-color:var(--border-strong);color:var(--text)}
 .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
-.out-area{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;min-height:340px;position:relative}
+.out-area{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;min-height:420px;position:relative}
 .out-area .cursor{display:inline-block;width:2px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:0}}
 .out-line{margin-bottom:10px;font-size:13.5px;color:var(--text-muted);line-height:1.7}
