@@ -245,24 +245,31 @@ function onDrop(e: DragEvent) {
       <button v-for="g in groups" :key="g" class="chip" :class="{ on: groupFilter === g }" @click="groupFilter = g">{{ g }}</button>
     </div>
 
-    <!-- 批量操作条 -->
-    <div v-if="selected.size > 0" class="batch-bar">
-      <span>已选 <b>{{ selected.size }}</b> 篇</span>
-      <button class="btn btn-danger btn-sm" @click="removeSelected">删除选中</button>
-      <button class="btn btn-soft btn-sm" @click="batchTagOpen = !batchTagOpen">设置分组</button>
-      <button class="btn btn-ghost btn-sm" @click="clearSelectedTags">清除分组</button>
-      <button class="btn btn-ghost btn-sm" @click="selected = new Set()">取消</button>
-      <div v-if="batchTagOpen" class="batch-tag-input">
+    <div class="card" style="padding:0;overflow:hidden">
+      <!-- 常驻批量工具条（表格标题栏，勾选只变状态不跳动） -->
+      <div class="tbl-bar">
+        <span class="tbl-bar-count">
+          <b>{{ selected.size }}</b> 篇已选
+          <span v-if="selected.size === 0" style="color:var(--text-faint);font-weight:400">· 勾选表格中文档后可批量操作</span>
+        </span>
+        <div class="tbl-bar-actions">
+          <button class="btn btn-soft btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '批量设置 / 新建分组'" @click="batchTagOpen = !batchTagOpen">编辑分组</button>
+          <button class="btn btn-danger btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '删除选中文档'" @click="removeSelected">删除</button>
+          <button class="btn btn-ghost btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '清除选中文档的分组'" @click="clearSelectedTags">清除分组</button>
+          <button v-if="selected.size > 0" class="btn btn-ghost btn-sm" @click="selected = new Set()">取消</button>
+        </div>
+      </div>
+      <!-- 编辑分组展开区（工具条内展开，不推挤表格） -->
+      <div v-if="batchTagOpen" class="tbl-bar-tags">
+        <span class="tag-editor-label">加入分组：</span>
         <select class="select" v-model="batchTag">
           <option value="">选择已有分组…</option>
           <option v-for="g in groups" :key="g" :value="g">{{ g }}</option>
         </select>
         <input class="input" v-model="batchNewTag" placeholder="或输入新分组名…" @keydown.enter="batchTag = batchNewTag.trim() || batchTag" />
         <button class="btn btn-primary btn-sm" @click="applyBatchTag">应用</button>
+        <button class="btn btn-ghost btn-sm" @click="batchTagOpen = false">收起</button>
       </div>
-    </div>
-
-    <div class="card" style="padding:0;overflow:hidden">
       <div class="scroll-limit">
         <table class="tbl">
         <colgroup><col style="width:34px" /><col /><col /><col /><col /><col /><col style="width:150px" /></colgroup>
@@ -358,15 +365,22 @@ function onDrop(e: DragEvent) {
   border-radius: 999px; padding: 4px 12px; font-size: 12.5px; cursor: pointer;
 }
 .chip.on { background: var(--accent); color: #0b0e13; border-color: var(--accent); }
-.batch-bar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  background: rgba(232, 179, 106, 0.08); border: 1px solid rgba(232, 179, 106, 0.3);
-  border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px;
+.tbl-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--surface-2);
+  background: rgba(255, 255, 255, 0.015);
 }
-.batch-bar b { color: var(--accent); }
-.batch-tag-input { display: flex; gap: 6px; align-items: center; width: 100%; margin-top: 6px; }
-.batch-tag-input .select { width: 180px; }
-.batch-tag-input .input { width: 180px; }
+.tbl-bar-count { font-size: 13px; color: var(--text-muted); margin-right: auto; }
+.tbl-bar-count b { color: var(--accent); font-size: 15px; }
+.tbl-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tbl-bar-actions .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.tbl-bar-tags {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--surface-2);
+  background: rgba(232, 179, 106, 0.05); font-size: 12.5px;
+}
+.tbl-bar-tags .select { width: 180px; }
+.tbl-bar-tags .input { width: 180px; }
 tr.sel td { background: rgba(232, 179, 106, 0.06); }
 .tag-editor-row td { border-top: 1px dashed var(--surface-2); }
 .tag-editor { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 0; }
