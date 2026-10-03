@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { inject } from "vue";
+import { inject, ref, type Ref } from "vue";
 
 defineProps<{ active: string }>();
 const emit = defineEmits<{ navigate: [id: string] }>();
 const toast = inject("toast") as (msg: string) => void;
-const brightness = inject("brightness") as { value: number };
+// 页面亮度：App provide 的 ref；模板直接 v-model 绑定变量（script setup 顶层 ref 自动解包）
+const brightness = inject<Ref<number>>("brightness") ?? ref(1);
 
 const mainItems = [
   { id: "library", label: "文档库", badge: "", icon: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>' },
@@ -53,7 +54,7 @@ function navigate(id: string) {
     <div class="sidebar-foot">
       <div class="brightness">
         <svg viewBox="0 0 24 24" title="变暗"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
-        <input type="range" min="0.6" max="1.6" step="0.05" v-model.number="brightness.value" title="页面亮度" />
+        <input type="range" min="0.6" max="1.6" step="0.05" v-model.number="brightness" title="页面亮度" />
         <svg viewBox="0 0 24 24" title="变亮"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
       </div>
       <div class="foot-btns">
