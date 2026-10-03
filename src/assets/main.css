@@ -32,8 +32,8 @@
 [data-theme="light"] .shot-table th{background:rgba(0,0,0,.04)}
 [data-theme="light"] .price-panel{border-color:rgba(169,113,47,.35);background:rgba(169,113,47,.07)}
 [data-theme="light"] #toast{box-shadow:0 8px 24px rgba(30,40,55,.18)}
-[data-theme="light"] .scroll-limit::-webkit-scrollbar-thumb,.scroll-limit-sm::-webkit-scrollbar-thumb{background:#C6CFDA}
-[data-theme="light"] .scroll-limit::-webkit-scrollbar-thumb:hover,.scroll-limit-sm::-webkit-scrollbar-thumb:hover{background:#ADB9C7}
+[data-theme="light"] .scroll-limit::-webkit-scrollbar-thumb,.scroll-limit-sm::-webkit-scrollbar-thumb,.out-area::-webkit-scrollbar-thumb{background:#C6CFDA}
+[data-theme="light"] .scroll-limit::-webkit-scrollbar-thumb:hover,.scroll-limit-sm::-webkit-scrollbar-thumb:hover,.out-area::-webkit-scrollbar-thumb:hover{background:#ADB9C7}
 [data-theme="light"] .hot-num{color:var(--text-faint)}
 [data-theme="light"] .hot-dot{background:var(--accent)}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -197,7 +197,7 @@ table.tbl tr:hover .row-actions{opacity:1}
 .chip{padding:6px 13px;border-radius:20px;font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;transition:all .14s}
 .chip:hover{border-color:var(--border-strong);color:var(--text)}
 .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
-.out-area{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;min-height:420px;position:relative}
+.out-area{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;min-height:420px;max-height:calc(100vh - 340px);overflow-y:auto;overscroll-behavior:contain;position:relative}
 .out-area .cursor{display:inline-block;width:2px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:0}}
 .out-line{margin-bottom:10px;font-size:13.5px;color:var(--text-muted);line-height:1.7}
@@ -243,10 +243,10 @@ table.tbl tr:hover .row-actions{opacity:1}
 /* ===== 通用滚动限制：长内容限高 + 右侧滚动条 ===== */
 .scroll-limit{max-height:460px;overflow-y:auto;overscroll-behavior:contain}
 .scroll-limit-sm{max-height:320px;overflow-y:auto;overscroll-behavior:contain}
-.scroll-limit::-webkit-scrollbar,.scroll-limit-sm::-webkit-scrollbar{width:8px}
-.scroll-limit::-webkit-scrollbar-thumb,.scroll-limit-sm::-webkit-scrollbar-thumb{background:#2a3340;border-radius:4px}
-.scroll-limit::-webkit-scrollbar-thumb:hover,.scroll-limit-sm::-webkit-scrollbar-thumb:hover{background:#3a4656}
-.scroll-limit::-webkit-scrollbar-track,.scroll-limit-sm::-webkit-scrollbar-track{background:transparent}
+.scroll-limit::-webkit-scrollbar,.scroll-limit-sm::-webkit-scrollbar,.out-area::-webkit-scrollbar{width:8px}
+.scroll-limit::-webkit-scrollbar-thumb,.scroll-limit-sm::-webkit-scrollbar-thumb,.out-area::-webkit-scrollbar-thumb{background:#2a3340;border-radius:4px}
+.scroll-limit::-webkit-scrollbar-thumb:hover,.scroll-limit-sm::-webkit-scrollbar-thumb:hover,.out-area::-webkit-scrollbar-thumb:hover{background:#3a4656}
+.scroll-limit::-webkit-scrollbar-track,.scroll-limit-sm::-webkit-scrollbar-track,.out-area::-webkit-scrollbar-track{background:transparent}
 @media (max-width:760px){.scroll-limit{max-height:340px}.scroll-limit-sm{max-height:260px}}
 /* ===== AI 输出 Markdown 渲染 ===== */
 .md-render{font-size:13.5px;line-height:1.7;color:var(--text)}
