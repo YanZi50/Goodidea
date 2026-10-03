@@ -73,3 +73,7 @@
 - 新增**思考模式开关**（设置 → 模型接入，默认关闭）：DeepSeek V4 默认启用思考，reasoning 与正文共享 max_tokens 且按输出价计费（实测 300 配额下正文被吃光、偏慢偏贵）；关闭时经 `providerOptions.openai.reasoningEffort="none"` 透传（官方 Chat Completions 支持 none 关闭），开启时传 "high"；仅 deepseek 模型生效，其他兼容端点不传。实测：none 模式下 in=26/out=100/reasoning=0、正文完整，费用约思考模式 1/3；BUG-009 已记录（@0605072）
 - 文档库修复：①行内移组「未分组」选项改用 select 原生空值 + 保存时转 null，消除 null 绑定歧义（此前可能把 group_id 写成空字符串导致文档从「未分组」视图消失）；②批量导入不再逐篇弹 toast（单元素 toast 会闪屏覆盖），改按钮内进度显示「导入中 i/N…」，成功/重复静默累计、失败逐篇提示、完成汇总一条（含归入分组信息）（@0605072）
 - 验证：vue-tsc + vite build 全绿（397 模块）；思考模式开关经 DeepSeek 官方 API 直连实测（none/high 行为符合预期）；设置页经 HTTP 通道渲染 0 布局溢出、0 JS 错误（@0605072）
+
+### Fixed（P2d UX：建组后智能分析分组实时同步）
+- 用户反馈「建完分组，智能分析里面分组不显示，需要刷新」：根因是 AnalysisView 仅在挂载时拉取一次 groups，v-show 切换视图不触发重新加载。新增轻量数据总线 `src/lib/bus.ts`（无 pinia 依赖，注册/广播/注销三函数）：文档库每次数据变更（建组/删组/移组/导入/删除）在 `refresh()` 末尾广播，分析页监听后自动重拉分组与统计；切到分析页即可见最新分组，无需手动刷新（@待回填）
+- 验证：vue-tsc + vite build 全绿（398 模块，新增 bus.ts）；分析页分组实时同步逻辑待真机确认（@待回填）
