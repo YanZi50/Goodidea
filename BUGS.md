@@ -113,6 +113,18 @@
 
 ---
 
+## BUG-010：shot.py chrome_cli 降级模式截图视图错位（SPA hash 路由）
+
+- **日期**：2026-10-03
+- **关联 commit**：@234f3ed
+- **所属模块**：验证工具链（html skill scripts/shot.py）
+- **症状**：`shot.py` 在 playwright 缺失的降级模式（chrome_cli + CDP，本环境实际用 Edge）下，对带 hash 的 URL（`index.html#analysis / #hotspot / #library`）截图，渲染结果一律显示「生成工作台」，与请求视图不符；此前 playwright 模式截图正常。
+- **根因**：降级模式 CDP 截图流程对 SPA hash 路由的渲染时机/状态处理与 playwright 路径不一致（疑似稳态判定提前或注入副作用），**非应用路由 bug**——用系统 Edge headless 直连同一 URL（`msedge --headless=new --disable-gpu --no-sandbox --window-size=1440,900 --virtual-time-budget=6000 --screenshot=<out> "<url>"`）验证：`#analysis` 正确显示智能分析页、`#hotspot` 正确显示实时热点页、左下角亮度滑块均正常渲染。
+- **解决**：验证通道调整为「**Edge headless 直连截图做视觉核对**（`--virtual-time-budget=6000` 保证 Vue mount）+ shot.py 报告（consoleErrors / horizontalOverflow lint）做错误核对」；shot.py 截图仅作辅助，发现与请求视图不符时以 Edge 直连为准。
+- **预防**：涉及 hash 路由的 SPA 截图验证，优先用 Edge headless 直连；发现 shot.py 降级截图可疑时先 Edge 直连复核，勿据此误判应用 bug（本次曾险些误判 hash 路由失效）。
+
+---
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。
