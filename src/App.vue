@@ -10,11 +10,16 @@ import UsageView from "./views/UsageView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import { reloadPriceTable } from "./lib/ai";
 
-// 页面亮暗（左下角滑块调节；持久化，默认 1 = 原亮度）
-const BRIGHT_KEY = "goodidea.ui.brightness.v1";
-const brightness = ref<number>(Number(localStorage.getItem(BRIGHT_KEY)) || 1);
-provide("brightness", brightness);
-watch(brightness, (v) => localStorage.setItem(BRIGHT_KEY, String(v)));
+// 主题：暗色 / 浅色（侧栏底部切换；持久化，默认暗色）
+const THEME_KEY = "goodidea.ui.theme.v1";
+const theme = ref<"dark" | "light">(
+  (localStorage.getItem(THEME_KEY) as "dark" | "light") || "dark"
+);
+provide("theme", theme);
+watch(theme, (v) => {
+  localStorage.setItem(THEME_KEY, v);
+  document.documentElement.dataset.theme = v;
+});
 
 const TITLES: Record<string, [string, string]> = {
   library: ["文档库", "所有喂给 Goodidea 的材料都沉淀在这里"],
@@ -46,6 +51,8 @@ function navigate(id: string) {
 }
 
 onMounted(() => {
+  // 恢复持久化主题到 html 根（保证刷新后浅色生效）
+  document.documentElement.dataset.theme = theme.value;
   // 启动时加载可维护价格表（billing_rules；db 不可用时静默回退常量）
   void reloadPriceTable();
   const sync = () => {
@@ -58,7 +65,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app" :style="{ filter: 'brightness(' + brightness + ')' }">
+  <div class="app">
     <Sidebar :active="activeView" @navigate="navigate" />
     <div class="main">
       <Topbar :title="TITLES[activeView][0]" :desc="TITLES[activeView][1]" />
