@@ -75,8 +75,11 @@ export function chunkText(text: string, maxLen = 1500): string[] {
   return chunks;
 }
 
-/** 入库一个文件；返回状态（inserted / duplicate / error） */
-export async function ingestFile(file: File): Promise<
+/** 入库一个文件；返回状态（inserted / duplicate / error）；targetGroupId 为 null 时归入未分组 */
+export async function ingestFile(
+  file: File,
+  targetGroupId: number | null = null
+): Promise<
   { status: "inserted"; docId: number; chunks: number } | { status: "duplicate"; docId: number } | { status: "error"; message: string }
 > {
   try {
@@ -96,6 +99,7 @@ export async function ingestFile(file: File): Promise<
       file_hash: hash,
       size: file.size,
       tags,
+      group_id: targetGroupId,
     });
 
     const chunks = chunkText(text);

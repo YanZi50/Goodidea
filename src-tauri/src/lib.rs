@@ -9,10 +9,11 @@ fn greet(name: &str) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // P0：核心表 documents/chunks；analyses/generations/hotspot_snapshots/billing_rules 随 P1+ 递增版本迁移
-    let migrations = vec![Migration {
-        version: 1,
-        description: "create_documents_and_chunks",
-        sql: "CREATE TABLE IF NOT EXISTS documents (
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "create_documents_and_chunks",
+            sql: "CREATE TABLE IF NOT EXISTS documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 filename TEXT NOT NULL,
                 file_type TEXT NOT NULL,
@@ -28,8 +29,20 @@ pub fn run() {
                 content TEXT NOT NULL,
                 token_count INTEGER
               );",
-        kind: MigrationKind::Up,
-    }];
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create_groups_and_add_group_id",
+            sql: "CREATE TABLE IF NOT EXISTS groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+              );
+              ALTER TABLE documents ADD COLUMN group_id INTEGER;",
+            kind: MigrationKind::Up,
+        },
+    ];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

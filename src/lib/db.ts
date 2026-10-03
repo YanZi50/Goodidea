@@ -11,7 +11,15 @@ export interface DocumentRow {
   file_hash: string | null;
   size: number | null;
   tags: string | null;
+  group_id: number | null;
   created_at: string;
+}
+
+export interface GroupRow {
+  id: number;
+  name: string;
+  created_at: string;
+  doc_count: number;
 }
 
 const DB_PATH = "sqlite:goodidea.db";
@@ -94,7 +102,7 @@ export async function listDocuments(): Promise<DocumentRow[]> {
   try {
     const d = await getDb();
     const rows = await d.select<DocumentRow[]>(
-      "SELECT id, filename, file_type, file_hash, size, tags, created_at FROM documents ORDER BY created_at DESC, id DESC"
+      "SELECT id, filename, file_type, file_hash, size, tags, group_id, created_at FROM documents ORDER BY created_at DESC, id DESC"
     );
     return rows ?? [];
   } catch (err) {
@@ -107,24 +115,25 @@ export async function listDocuments(): Promise<DocumentRow[]> {
 export async function findDocumentByHash(hash: string): Promise<DocumentRow | null> {
   const d = await getDb();
   const rows = await d.select<DocumentRow[]>(
-    "SELECT id, filename, file_type, file_hash, size, tags, created_at FROM documents WHERE file_hash = $1 LIMIT 1",
+    "SELECT id, filename, file_type, file_hash, size, tags, group_id, created_at FROM documents WHERE file_hash = $1 LIMIT 1",
     [hash]
   );
   return rows[0] ?? null;
 }
 
-/** 插入文档，返回自增 id */
+/** 插入文档，返回自增 id；groupId 为空时归入未分组 */
 export async function insertDocument(doc: {
   filename: string;
   file_type: string;
   file_hash: string;
   size: number;
   tags: string;
+  group_id?: number | null;
 }): Promise<number> {
   const d = await getDb();
   await d.execute(
-    "INSERT INTO documents (filename, file_type, file_hash, size, tags, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
-    [doc.filename, doc.file_type, doc.file_hash, doc.size, doc.tags, new Date().toISOString().slice(0, 19).replace("T", " ")]
+    "INSERT INTO documents (filename, file_type, file_hash, size, tags, group_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    [doc.filename, doc.file_type, doc.file_hash, doc.size, doc.tags, doc.group_id ?? null, new Date().toISOString().slice(0, 19).replace("T", " ")]
   );
   const rows = await d.select<{ id: number }[]>("SELECT last_insert_rowid() AS id");
   return rows[0].id;
@@ -176,7 +185,7 @@ export async function deleteDocuments(ids: number[]): Promise<void> {
   await d.execute(`DELETE FROM documents WHERE id IN (${ph})`, ids);
 }
 
-/** 更新文档分组标签（tags 存 JSON 数组字符串，如 ["抖音","名表"]） */
+/** 更新文档分组标签（tags 存 JSON 数组字符串，如 ["抖音","名表"]；已由 group_id 取代 UI 使用，保留兼容） */
 export async function updateDocumentTags(id: number, tags: string[]): Promise<void> {
   const d = await getDb();
   await d.execute("UPDATE documents SET tags = $1 WHERE id = $2", [JSON.stringify(tags), id]);
@@ -193,19 +202,57 @@ export function parseTags(tags: string | null): string[] {
   }
 }
 
-/** 全部分组名（跨文档去重，按中文排序） */
-export async function listGroups(): Promise<string[]> {
+// ---------- P2c：分组（groups 表 + documents.group_id，组间互不干涉） ----------
+
+/** 全部组（含文档数），按创建时间正序 */
+export async function listGroups(): Promise<GroupRow[]> {
   if (!isTauriRuntime()) return [];
   try {
     const d = await getDb();
-    const rows = await d.select<{ tags: string | null }[]>("SELECT DISTINCT tags FROM documents");
-    const set = new Set<string>();
-    for (const r of rows) for (const t of parseTags(r.tags)) set.add(t);
-    return [...set].sort((a, b) => a.localeCompare(b, "zh-CN"));
+    const rows = await d.select<GroupRow[]>(
+      `SELECT g.id, g.name, g.created_at, COUNT(d.id) AS doc_count
+       FROM groups g LEFT JOIN documents d ON d.group_id = g.id
+       GROUP BY g.id, g.name, g.created_at ORDER BY g.created_at ASC, g.id ASC`
+    );
+    return rows ?? [];
   } catch (err) {
     console.error("[db] listGroups failed", err);
     return [];
   }
+}
+
+/** 创建组（重名抛错），返回自增 id */
+export async function createGroup(name: string): Promise<number> {
+  const d = await getDb();
+  const dup = await d.select<{ id: number }[]>("SELECT id FROM groups WHERE name = $1 LIMIT 1", [name]);
+  if (dup.length > 0) throw new Error(`分组「${name}」已存在`);
+  await d.execute("INSERT INTO groups (name, created_at) VALUES ($1, $2)", [
+    name,
+    new Date().toISOString().slice(0, 19).replace("T", " "),
+  ]);
+  const rows = await d.select<{ id: number }[]>("SELECT last_insert_rowid() AS id");
+  return rows[0].id;
+}
+
+/** 删除组：组内文档移回未分组，再删组本身 */
+export async function deleteGroup(id: number): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE documents SET group_id = NULL WHERE group_id = $1", [id]);
+  await d.execute("DELETE FROM groups WHERE id = $1", [id]);
+}
+
+/** 单篇文档移入组（groupId 为 null = 移出分组） */
+export async function setDocumentGroup(id: number, groupId: number | null): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE documents SET group_id = $1 WHERE id = $2", [groupId, id]);
+}
+
+/** 批量移动文档到组（groupId 为 null = 批量移出分组） */
+export async function setDocumentsGroup(ids: number[], groupId: number | null): Promise<void> {
+  if (ids.length === 0) return;
+  const d = await getDb();
+  const ph = ids.map((_, i) => `$${i + 1}`).join(",");
+  await d.execute(`UPDATE documents SET group_id = $${ids.length + 1} WHERE id IN (${ph})`, [...ids, groupId]);
 }
 
 /** 全库内容（可选按文档范围；按文档/块序拼接，limit 截断防止超长 prompt） */
