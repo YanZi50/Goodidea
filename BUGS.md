@@ -125,6 +125,18 @@
 
 ---
 
+## BUG-011：左下角亮暗滑块拖动无反应（inject ref 模板解包失效）
+
+- **日期**：2026-10-03
+- **关联 commit**：@e5f28de
+- **所属模块**：UI（src/components/Sidebar.vue + src/App.vue 亮度注入）
+- **症状**：用户反馈左下角滑块拖动无反应，页面明暗不变化；滑块元素本身渲染正常。
+- **根因**：Sidebar 中 `const brightness = inject("brightness") as { value: number }`，模板绑定 `v-model.number="brightness.value"`。Vue 3 script setup 对顶层 ref 变量在模板中**自动解包**：`brightness` 在模板中已被解包为 `number`，再访问 `.value` 得到 `undefined`，v-model 的赋值也写不到 ref 上——滑块与页面亮度失去连接。
+- **解决**：Sidebar 改为 `const brightness = inject<Ref<number>>("brightness") ?? ref(1)`，模板直接用 `v-model.number="brightness"`（顶层 ref 自动解包 + 赋值写 `.value`），App 侧 `filter: brightness()` 随 ref 更新。
+- **预防**：模板中**不要**对 inject/provide 来的 ref 写 `xxx.value`（自动解包会先解包成值）；inject ref 统一用 `inject<Ref<T>>("key")` 类型标注并在模板直接绑定变量名。涉及响应式绑定的 UI 改动需真机或交互验证，headless 截图只能证明渲染存在、不能证明交互生效。
+
+---
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。

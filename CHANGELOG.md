@@ -102,3 +102,8 @@
 - **窗口铺满**：启动默认 1440×900 且 `maximized: true`（启动即最大化铺满屏幕，可手动还原）；生成工作台等页面随窗口变宽自动铺满（@234f3ed）
 - **左下角亮暗滑块**：侧栏底部（帮助/导出上方）新增亮度滑块（0.6–1.6，默认 1），拖拽即时调节整页明暗（CSS `filter: brightness()`），值持久化到 localStorage 下次启动沿用（@234f3ed）
 - 验证：vue-tsc + vite build 全绿（399 模块）；Edge headless 直连截图确认 #analysis/#hotspot 路由正常、滑块渲染、0 布局溢出；shot.py 降级模式截图视图错位已记 BUG-010，视觉核对改走 Edge 直连（@234f3ed）
+
+### Fixed + Changed（P3 UX 反馈二轮：滑块无响应修复 + 生成输出区放大）
+- **修复亮暗滑块无响应**（BUG-011）：Sidebar 把 inject 的亮度 ref 误按普通对象绑定 `v-model="brightness.value"`，Vue script setup 顶层 ref 在模板自动解包导致 `.value` 取到 undefined、赋值失效——改为 `inject<Ref<number>>` + 模板直接 `v-model.number="brightness"`，滑块拖拽即时驱动整页 `filter: brightness()`（@0aa86bc）
+- **生成工作台输出区放大**：两栏比例 2fr:3fr → 3fr:5fr（输出区约占内容区 62%，更宽）；输出卡片 min-height 340px → 420px；**去掉输出区内部 320px 限高滚动**，长生成内容完整展开、随页面滚动查看，不再被截断滚动（@0aa86bc）
+- 验证：vue-tsc + vite build 全绿（399 模块）；Edge headless 直连 #studio 截图确认输出区加宽、全展开、0 布局溢出；滑块交互修复原理核验（解包语义）并记录 BUG-011，真机拖动待用户确认（@0aa86bc）
