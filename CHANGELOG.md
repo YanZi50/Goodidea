@@ -31,3 +31,4 @@
 - AI 接入（Vercel AI SDK v7 + @ai-sdk/openai 4.x，OpenAI 兼容，默认指向火山方舟 `/api/v3`）：设置页「模型接入」表单（显示名 / 模型 ID / Base URL / API Key，密钥仅存本机 localStorage，不入库）；全库分析（读取前 60 块 → 浓缩要点 + 指出问题，Markdown 输出）；生成工作台真实流式生成（textStream 逐段渲染 + 光标 + 完成统计）；消耗模块（常量价格表按模型计价，当日 / 近 7 日 / 近 30 日 / 按模型累计持久化到 localStorage，UsageView 全部真实化）；未配置模型时界面明确引导（@e1c79d5）
 - 已知优化项（非阻塞）：引入 AI SDK 后前端 bundle ≈ 995KB（minify），vite 警告 >500KB；P2 按视图 dynamic import 分包（@e1c79d5）
 - 验证：vue-tsc + vite build 全绿（389 模块）；设置页 / 工作台渲染 0 控制台错误（@e1c79d5）
+- 价格表收录 DeepSeek：`deepseek-v4-flash`（1元/2元 每百万 tokens）、`deepseek-v4-pro`（3元/6元），`deepseek-chat` 旧名兼容映射（官方 2026-07-24 弃用后等价 v4-flash 非思考模式）；接入方式不变——设置页填 `https://api.deepseek.com` + API Key 即可（OpenAI 兼容）。价格以官方定价页为准，峰谷/优惠时段可能有差异（@78e6559）
