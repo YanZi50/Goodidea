@@ -42,7 +42,8 @@
 - BUG-007：验证通道 inline_dist.py 用 `</body>` 做注入锚点，被 dompurify 构建产物内的 `</body>` 字面量劫持，hash 注入脚本插入 JS 字符串中间破坏语法（渲染全部报 `Unexpected end of input`）；锚点改为内联后唯一的 `<script type="module">`，并明确"注入锚点必须规避 JS 内容字面量"预防规则（@3944871）
 
 ### Added（P2 实时热点 + 构建优化）
-- 实时热点模块真实化（原为设计稿示例数据）：接入 vvhan 免费热榜 API（抖音热榜 / 微博热搜 / 知乎热榜 / 百度热点 四个源）；`tauri-plugin-http` 插件走 Rust 侧请求绕过 CORS（capabilities 白名单 vvhan 等 5 个热点 API 域名）；行业关键词标记——名表 / 包袋 / 回收 / 奢侈品等 23 词命中条目高亮「行业相关」标签，支持「只看行业相关」筛选；点击条目经 opener 在浏览器打开原文；接口不可用显示错误态 + 手动输入话题兜底（@待回填）
-- bundle 分包：vite rolldown manualChunks 将 AI SDK（vendor-ai）、文档解析 mammoth（vendor-doc）、Markdown（vendor-md）、Vue 运行时（vendor-vue）拆为独立 chunk，主包 1068KB → 42KB，缓存复用提升；vendor-ai 583KB 为 AI SDK 固有体积，警告保留，彻底方案（视图级 dynamic import）留待后续（@待回填）
-- 验证：vue-tsc + vite build 全绿（396 模块）；cargo check 通过（tauri-plugin-http 2.8.0）；热点页经 HTTP 通道渲染 0 JS 错误（vvhan 在本验证环境不可达属预期，错误态正常显示）（@待回填）
+- 实时热点模块真实化（原为设计稿示例数据）：接入 vvhan 免费热榜 API（抖音热榜 / 微博热搜 / 知乎热榜 / 百度热点 四个源）；`tauri-plugin-http` 插件走 Rust 侧请求绕过 CORS（capabilities 白名单 vvhan 等 5 个热点 API 域名）；行业关键词标记——名表 / 包袋 / 回收 / 奢侈品等 23 词命中条目高亮「行业相关」标签，支持「只看行业相关」筛选；点击条目经 opener 在浏览器打开原文；接口不可用显示错误态 + 手动输入话题兜底（@c9253ee）
+- bundle 分包：vite rolldown manualChunks 将 AI SDK（vendor-ai）、文档解析 mammoth（vendor-doc）、Markdown（vendor-md）、Vue 运行时（vendor-vue）拆为独立 chunk，主包 1068KB → 42KB，缓存复用提升；vendor-ai 583KB 为 AI SDK 固有体积，警告保留，彻底方案（视图级 dynamic import）留待后续（@c9253ee）
+- 验证：vue-tsc + vite build 全绿（396 模块）；cargo check 通过（tauri-plugin-http 2.8.0）；热点页经 HTTP 通道渲染 0 JS 错误（vvhan 在本验证环境不可达属预期，错误态正常显示）（@c9253ee）
+- BUG-008：vite rolldown 分包后 file:// 内联验证法失效（modulepreload 链接与 chunk 相对 import 被 CORS 拦截）；验证通道切换为本机 HTTP 服务（127.0.0.1:8765）+ shot.py URL 模式，与 Tauri 真机自定义协议加载行为一致（@0667bf5）
 - 价格表收录 DeepSeek：`deepseek-v4-flash`（1元/2元 每百万 tokens）、`deepseek-v4-pro`（3元/6元），`deepseek-chat` 旧名兼容映射（官方 2026-07-24 弃用后等价 v4-flash 非思考模式）；接入方式不变——设置页填 `https://api.deepseek.com` + API Key 即可（OpenAI 兼容）。价格以官方定价页为准，峰谷/优惠时段可能有差异（@78e6559）
