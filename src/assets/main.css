@@ -64,6 +64,14 @@ input,select,textarea{font-family:inherit;color:inherit}
 .btn-soft:hover{background:rgba(232,179,106,.22)}
 .btn-green{background:var(--green-soft);color:var(--green)}
 .btn-green:hover{background:rgba(111,211,164,.22)}
+/* 开关（toggle-row）：checkbox 视觉隐藏 + 轨道/旋钮 */
+.toggle-row{display:inline-flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
+.toggle-row input{position:absolute;opacity:0;width:0;height:0}
+.toggle-track{position:relative;width:38px;height:22px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);transition:background .18s,border-color .18s;flex-shrink:0}
+.toggle-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-muted);transition:transform .18s,background .18s}
+.toggle-row input:checked + .toggle-track{background:var(--accent);border-color:var(--accent)}
+.toggle-row input:checked + .toggle-track .toggle-knob{transform:translateX(16px);background:#241A08}
+.toggle-text{font-size:13px;color:var(--text-muted)}
 .btn-danger-ghost{background:transparent;border-color:var(--border);color:var(--red)}
 .btn-danger-ghost:hover{background:var(--red-soft);border-color:transparent}
 .btn-sm{padding:5px 11px;font-size:12.5px}

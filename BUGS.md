@@ -101,6 +101,18 @@
 
 ---
 
+## BUG-009：DeepSeek V4 默认思考模式吃光 max_tokens，正文输出为空（且偏慢偏贵）
+
+- **日期**：2026-10-03
+- **关联 commit**：@待回填
+- **所属模块**：AI 接入（src/lib/ai.ts + 设置页思考模式开关）
+- **症状**：实测 `deepseek-v4-flash` 默认请求（不传思考参数）下 `max_tokens=300` 时，usage 输出 300 tokens **全部为 reasoning_tokens，正文为空**；此前实测 750 输出中 695 为 reasoning（按输出价计费、偏慢偏贵）。用户在默认思考模式下可能遇到「分析结果空白 / 内容很短」且费用偏高。
+- **根因**：DeepSeek V4 默认启用思考模式（官方文档确认 "enabled by default"），reasoning 与正文**共享 max_tokens 配额**；小 max_tokens 下 reasoning 先吃掉配额，正文无剩余。
+- **解决**：新增「思考模式」开关（设置 → 模型接入，默认**关闭**）。关闭时经 `providerOptions.openai.reasoningEffort = "none"` 透传（DeepSeek Chat Completions 官方支持 none 关闭思考）；开启时传 `"high"`。仅对 model 含 deepseek 生效，其他兼容端点不传以免未知参数。实测 none：in=26/out=100/reasoning=0、正文完整、费用约为思考模式 1/3；high：out=300 全 reasoning 正文为空（复现原问题）。另：开启思考时应用侧需注意 max_tokens 需 ≥2048（官方建议）。
+- **预防**：① 新增模型默认值优先「非思考」或提供开关，避免 reasoning 配额抢占；② 模型行为变化需真机/直连实测（tpl/thinking_probe.mjs 已留存），不依赖假设；③ 思考模式下 max_tokens 配额共享，小配额 = 正文为空，UI 需提示或自动加大。
+
+---
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。

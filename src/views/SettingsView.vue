@@ -75,6 +75,14 @@ function clear() {
           <label class="label">API Key</label>
           <input class="input" v-model="cfg.apiKey" type="password" placeholder="sk-…（仅存本机）" />
         </div>
+        <div class="field" style="margin:0;grid-column:1 / -1">
+          <label class="label">思考模式 <span class="hint" style="color:var(--text-faint);font-weight:400">DeepSeek V4 默认思考、reasoning 按输出价计费且更慢</span></label>
+          <label class="toggle-row">
+            <input type="checkbox" v-model="cfg.thinking" />
+            <span class="toggle-track"><span class="toggle-knob"></span></span>
+            <span class="toggle-text">{{ cfg.thinking ? "开启（复杂推理更强，更慢更贵）" : "关闭（分析 / 生成更快更省，推荐）" }}</span>
+          </label>
+        </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-primary btn-sm" @click="save">保存配置</button>
