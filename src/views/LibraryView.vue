@@ -122,7 +122,8 @@ async function removeDoc(d: DocumentRow) {
       </button>
     </div>
     <div class="card" style="padding:0;overflow:hidden">
-      <table class="tbl">
+      <div class="scroll-limit">
+        <table class="tbl">
         <colgroup><col /><col /><col /><col /><col /><col /></colgroup>
         <thead><tr><th>文件名</th><th>类型</th><th>大小</th><th>入库时间</th><th>标签</th><th style="text-align:right">操作</th></tr></thead>
         <tbody>
@@ -156,7 +157,8 @@ async function removeDoc(d: DocumentRow) {
             </td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
     <div class="libstats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px">
       <div class="card">

@@ -54,7 +54,6 @@ onMounted(() => {
     <div class="main">
       <Topbar :title="TITLES[activeView][0]" :desc="TITLES[activeView][1]" />
       <div class="content">
-        <span class="demo-note">P0 骨架 · 全部为示例数据，仅用于确认视觉方向</span>
         <LibraryView v-show="activeView === 'library'" />
         <AnalysisView v-show="activeView === 'analysis'" />
         <StudioView v-show="activeView === 'studio'" />

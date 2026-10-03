@@ -31,4 +31,10 @@
 - AI 接入（Vercel AI SDK v7 + @ai-sdk/openai 4.x，OpenAI 兼容，默认指向火山方舟 `/api/v3`）：设置页「模型接入」表单（显示名 / 模型 ID / Base URL / API Key，密钥仅存本机 localStorage，不入库）；全库分析（读取前 60 块 → 浓缩要点 + 指出问题，Markdown 输出）；生成工作台真实流式生成（textStream 逐段渲染 + 光标 + 完成统计）；消耗模块（常量价格表按模型计价，当日 / 近 7 日 / 近 30 日 / 按模型累计持久化到 localStorage，UsageView 全部真实化）；未配置模型时界面明确引导（@e1c79d5）
 - 已知优化项（非阻塞）：引入 AI SDK 后前端 bundle ≈ 995KB（minify），vite 警告 >500KB；P2 按视图 dynamic import 分包（@e1c79d5）
 - 验证：vue-tsc + vite build 全绿（389 模块）；设置页 / 工作台渲染 0 控制台错误（@e1c79d5）
+
+### Changed（UX 优化，用户真机反馈）
+- 长内容统一「限高 + 右侧滚动条」：新增通用类 `.scroll-limit` / `.scroll-limit-sm`（桌面 460px / 320px，移动端按比例降低，含自定义滚动条样式），应用到文档库表格、智能分析结果、生成工作台输出区；后续所有长内容展示沿用同一模式（@待回填）
+- 智能分析结果 Markdown 渲染：引入 `marked` + `dompurify`，AI 输出的 `##` / `-` / `**` 等符号渲染为排版友好的标题、列表、强调、引用块（输出先经 DOMPurify 消毒，防 AI 注入 HTML/脚本）；生成工作台输出区同样受益（@待回填）
+- 顶栏真实化：移除骨架示例值——模型徽标改读实际配置（未配置时显示「未配置模型」+ 红点），今日消耗改读 `todayCost()` 实时值（5s 轮询刷新）；移除「P0 骨架·全部为示例数据」横幅（真实数据已上线）（@待回填）
+- 验证：vue-tsc + vite build 全绿（391 模块）；文档库 / 智能分析渲染 0 控制台错误；Markdown 样例（h2/列表/强调/引用/分隔线）渲染截图核对通过，无符号残留（@待回填）
 - 价格表收录 DeepSeek：`deepseek-v4-flash`（1元/2元 每百万 tokens）、`deepseek-v4-pro`（3元/6元），`deepseek-chat` 旧名兼容映射（官方 2026-07-24 弃用后等价 v4-flash 非思考模式）；接入方式不变——设置页填 `https://api.deepseek.com` + API Key 即可（OpenAI 兼容）。价格以官方定价页为准，峰谷/优惠时段可能有差异（@78e6559）

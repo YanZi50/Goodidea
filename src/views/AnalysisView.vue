@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, inject } from "vue";
+import { ref, computed, onMounted, inject } from "vue";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { listDocuments, countChunks, listAllChunkContent } from "../lib/db";
 import {
   loadAIConfig,
@@ -18,6 +20,12 @@ const modelLabel = ref("");
 const analyzing = ref(false);
 const result = ref("");
 const lastMeta = ref<{ tokens: string; cost: string; at: string } | null>(null);
+
+/** AI 输出（Markdown）→ 消毒后的 HTML */
+const renderedResult = computed(() => {
+  if (!result.value) return "";
+  return DOMPurify.sanitize(marked.parse(result.value, { async: false }) as string);
+});
 
 async function refresh() {
   docCount.value = (await listDocuments()).length;
@@ -81,7 +89,7 @@ async function runAnalysis() {
     <div class="card" style="margin-bottom:14px">
       <div class="card-title">全库分析 <span class="hint">P1 · 真实调用（豆包/OpenAI 兼容）</span></div>
       <div v-if="analyzing" style="color:var(--text-faint);font-size:13px;padding:10px 0">正在分析全库（约 30–90 秒）…</div>
-      <div v-else-if="result" class="out-area" style="white-space:pre-wrap;font-size:13.5px">{{ result }}</div>
+      <div v-else-if="result" class="scroll-limit"><div class="md-render" v-html="renderedResult"></div></div>
       <div v-else style="color:var(--text-faint);font-size:13px;padding:10px 0">点击「重新分析全库」：浓缩核心要点 + 指出问题（矛盾 / 缺口 / 低质段落 / 建议）。</div>
       <div v-if="lastMeta" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">
         <span class="tag green">{{ lastMeta.cost }}</span>
