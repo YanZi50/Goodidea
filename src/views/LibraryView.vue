@@ -20,6 +20,7 @@ const docs = ref<DocumentRow[]>([]);
 const totalChunks = ref(0);
 const loading = ref(true);
 const importing = ref(false);
+const progress = ref(""); // 导入进度 "i/N"
 const keyword = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 
@@ -29,7 +30,7 @@ const groupFilter = ref<"all" | "none" | number>("all"); // all=全部跨组 / n
 const creatingGroup = ref(false);
 const newGroupName = ref("");
 const editingId = ref<number | null>(null); // 行内移组展开的文档 id
-const editGroupId = ref<number | null>(null);
+const editGroupId = ref<number | "">(""); // "" = 未分组（select 原生空值，避免 null 绑定歧义）
 
 // ---- 批量选择 ----
 const selected = ref<Set<number>>(new Set());
@@ -147,13 +148,14 @@ async function removeGroup(g: GroupRow) {
 // ---- 行内移组 ----
 function openEditor(d: DocumentRow) {
   editingId.value = d.id;
-  editGroupId.value = d.group_id;
+  editGroupId.value = d.group_id ?? "";
 }
 
 async function saveEditor(d: DocumentRow) {
+  const gid = editGroupId.value === "" ? null : editGroupId.value;
   try {
-    await setDocumentGroup(d.id, editGroupId.value);
-    toast(editGroupId.value === null ? `已移出分组：${d.filename}` : `已移入「${groupName(editGroupId.value)}」：${d.filename}`);
+    await setDocumentGroup(d.id, gid);
+    toast(gid === null ? `已移出分组：${d.filename}` : `已移入「${groupName(gid)}」：${d.filename}`);
     editingId.value = null;
     await refresh();
   } catch (err) {
@@ -205,26 +207,25 @@ async function handleFiles(files: FileList | File[]) {
   let ok = 0;
   let dup = 0;
   let errs = 0;
-  for (const f of list) {
+  for (let i = 0; i < list.length; i++) {
+    const f = list[i];
+    progress.value = `${i + 1}/${list.length}`;
     const r = await ingestFile(f, gid);
-    if (r.status === "inserted") {
-      ok++;
-      toast(`已入库：${f.name}（${r.chunks} 块）`);
-    } else if (r.status === "duplicate") {
-      dup++;
-      toast(`跳过重复：${f.name}`);
-    } else {
+    if (r.status === "inserted") ok++;
+    else if (r.status === "duplicate") dup++;
+    else {
       errs++;
       toast(`导入失败：${f.name} — ${r.message}`);
     }
   }
   importing.value = false;
+  progress.value = "";
   await refresh();
   const parts = [];
   if (ok) parts.push(`${ok} 篇入库`);
   if (dup) parts.push(`${dup} 篇重复`);
   if (errs) parts.push(`${errs} 篇失败`);
-  toast(`导入完成：${parts.join("，") || "无变化"}`);
+  toast(`导入完成：${parts.join("，") || "无变化"}${gid !== null ? `（归入「${groupName(gid)}」）` : ""}`);
   if (fileInput.value) fileInput.value.value = "";
 }
 
@@ -266,7 +267,7 @@ function onDrop(e: DragEvent) {
       </select>
       <button class="btn btn-ghost" @click="toast('粘贴文本入库即将开放（P1 二期）')">粘贴文本</button>
       <button class="btn btn-primary" :disabled="importing" @click="fileInput?.click()">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>{{ importing ? "导入中…" : "批量导入" }}
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>{{ importing ? `导入中 ${progress}…` : "批量导入" }}
       </button>
     </div>
 
@@ -355,7 +356,7 @@ function onDrop(e: DragEvent) {
               <div class="tag-editor">
                 <span class="tag-editor-label">归属组：</span>
                 <select class="select" v-model="editGroupId" style="width:180px">
-                  <option :value="null">未分组</option>
+                  <option value="">未分组</option>
                   <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
                 </select>
                 <button class="btn btn-primary btn-sm" @click="saveEditor(filtered.find((d) => d.id === editingId)!)">保存</button>
