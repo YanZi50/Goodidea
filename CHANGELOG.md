@@ -37,4 +37,7 @@
 - 智能分析结果 Markdown 渲染：引入 `marked` + `dompurify`，AI 输出的 `##` / `-` / `**` 等符号渲染为排版友好的标题、列表、强调、引用块（输出先经 DOMPurify 消毒，防 AI 注入 HTML/脚本）；生成工作台输出区同样受益（@待回填）
 - 顶栏真实化：移除骨架示例值——模型徽标改读实际配置（未配置时显示「未配置模型」+ 红点），今日消耗改读 `todayCost()` 实时值（5s 轮询刷新）；移除「P0 骨架·全部为示例数据」横幅（真实数据已上线）（@待回填）
 - 验证：vue-tsc + vite build 全绿（391 模块）；文档库 / 智能分析渲染 0 控制台错误；Markdown 样例（h2/列表/强调/引用/分隔线）渲染截图核对通过，无符号残留（@待回填）
+
+### Fixed（Bug 记录）
+- BUG-007：验证通道 inline_dist.py 用 `</body>` 做注入锚点，被 dompurify 构建产物内的 `</body>` 字面量劫持，hash 注入脚本插入 JS 字符串中间破坏语法（渲染全部报 `Unexpected end of input`）；锚点改为内联后唯一的 `<script type="module">`，并明确"注入锚点必须规避 JS 内容字面量"预防规则（@待回填）
 - 价格表收录 DeepSeek：`deepseek-v4-flash`（1元/2元 每百万 tokens）、`deepseek-v4-pro`（3元/6元），`deepseek-chat` 旧名兼容映射（官方 2026-07-24 弃用后等价 v4-flash 非思考模式）；接入方式不变——设置页填 `https://api.deepseek.com` + API Key 即可（OpenAI 兼容）。价格以官方定价页为准，峰谷/优惠时段可能有差异（@78e6559）

@@ -77,6 +77,18 @@
 
 ---
 
+## BUG-007：inline_dist.py 的 `</body>` replace 被构建产物字面量劫持，注入脚本插入 JS 中间破坏语法
+
+- **日期**：2026-10-03
+- **关联 commit**：（修复中，见 @hash）
+- **所属模块**：验证通道（ui-mockup/_shots/tpl/inline_dist.py）
+- **症状**：引入 marked + dompurify 后，shot.py 渲染 inline 产物全部报 `Uncaught SyntaxError: Unexpected end of input`（consoleErrors=1，双端一致）。
+- **根因**：dompurify 产物中含 `"<head></head><body>"` / `"</body>"` 字面量（其 DOM 解析探测逻辑）。inline_dist.py 用 `html.replace("</body>", "<script>location.hash='...';</script></body>")` 注入 hash 脚本，`str.replace` 替换**第一个**出现处——命中了主 JS 内部的 `</body>` 字符串，注入脚本被插进 JS 字符串字面量中间 → 脚本块被提前截断/语法破坏。
+- **解决**：注入锚点从 `</body>` 改为 `<script type="module">`（内联后该字符串在文件中唯一），注入脚本置于 module script 之前执行（`html.replace('<script type="module">', '<script>location.hash=...;</script><script type="module">', 1)`），不再依赖 HTML 结构字符串。
+- **预防**：① inline 工具注入点必须选择内联后**唯一且不属于 JS 内容**的锚点（`<script type="module">`）；② 引入新依赖后必须重跑 shot.py 全量验证，不能假设旧产物行为不变；③ 依赖产物可能含任意 HTML 结构字面量（`</body>`/`</head>`/`<script>`），一切 `replace` 注入都要规避 JS 内部命中。
+
+---
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。
