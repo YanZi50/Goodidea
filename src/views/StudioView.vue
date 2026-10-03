@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, inject } from "vue";
+import { ref, onMounted, onUnmounted, inject } from "vue";
 import {
   loadAIConfig,
   streamGeneration,
   calcCost,
   addCost,
 } from "../lib/ai";
+import { onUseHotspot } from "../lib/bus";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -22,6 +23,73 @@ const request = ref(
 const output = ref("");
 const generating = ref(false);
 const meta = ref<{ model: string; tokens: string; cost: string } | null>(null);
+
+// ---- 草稿（localStorage 存配置 + 输出 + 时间） ----
+const DRAFT_KEY = "goodidea.studio.draft.v1";
+const draftAt = ref<number | null>(null);
+
+interface StudioDraft {
+  request: string;
+  output: string;
+  activeSkills: string[];
+  activeMats: string[];
+  activeHot: string;
+  meta: { model: string; tokens: string; cost: string } | null;
+  savedAt: number;
+}
+
+function saveDraft() {
+  const draft: StudioDraft = {
+    request: request.value,
+    output: output.value,
+    activeSkills: [...activeSkills.value],
+    activeMats: [...activeMats.value],
+    activeHot: activeHot.value,
+    meta: meta.value,
+    savedAt: Date.now(),
+  };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  draftAt.value = draft.savedAt;
+  toast("草稿已保存");
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) {
+      toast("暂无草稿");
+      return;
+    }
+    const d = JSON.parse(raw) as StudioDraft;
+    request.value = d.request;
+    output.value = d.output;
+    activeSkills.value = new Set(d.activeSkills);
+    activeMats.value = new Set(d.activeMats);
+    activeHot.value = d.activeHot;
+    meta.value = d.meta;
+    toast(`已恢复草稿（${new Date(d.savedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} 保存）`);
+  } catch {
+    toast("草稿读取失败");
+  }
+}
+
+onMounted(() => {
+  // 热点页「接入生成」→ 设置热点参考并预填需求（需求为空时）
+  const off = onUseHotspot((topic) => {
+    activeHot.value = `# ${topic}`;
+    if (!request.value.trim()) {
+      request.value = `围绕热点「${topic}」，写一条口播脚本/种草文案：钩子 → 行业干货 → 行动号召。`;
+    }
+  });
+  onUnmounted(off);
+  // 有草稿时显示恢复入口
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (raw) draftAt.value = (JSON.parse(raw) as StudioDraft).savedAt;
+  } catch {
+    /* ignore */
+  }
+});
 
 function toggleChip(set: Set<string>, label: string) {
   if (set.has(label)) set.delete(label);
@@ -103,7 +171,9 @@ async function copyText() {
         <label class="label">热点参考（可选）</label>
         <div class="chips">
           <button v-for="c in hotspotChips" :key="c" class="chip" :class="{ on: activeHot === c }" @click="activeHot = c">{{ c }}</button>
+          <button v-if="!hotspotChips.includes(activeHot)" class="chip on" :title="activeHot" @click="activeHot = '不使用热点'">{{ activeHot }} ×</button>
         </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:4px">热点页点条目「生成」图标可直接接入此处</div>
       </div>
       <div class="field">
         <label class="label">需求描述</label>
@@ -112,7 +182,8 @@ async function copyText() {
       <div class="row" style="justify-content:space-between">
         <div style="font-size:12px;color:var(--text-faint)">按字符估算 ≈ ¥0.01–0.2 · 实际以 API usage 为准</div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost" @click="toast('保存草稿即将开放（P1 二期）')">存草稿</button>
+          <button v-if="draftAt !== null" class="btn btn-ghost" :title="`草稿保存于 ${new Date(draftAt).toLocaleString('zh-CN')}`" @click="restoreDraft">恢复草稿</button>
+          <button class="btn btn-ghost" @click="saveDraft">存草稿</button>
           <button class="btn btn-primary" :disabled="generating" @click="generate">
             <svg viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>{{ generating ? "生成中…" : "开始生成" }}
           </button>
