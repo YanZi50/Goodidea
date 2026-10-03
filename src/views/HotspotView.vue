@@ -1,75 +1,140 @@
 <script setup lang="ts">
-import { ref, inject } from "vue";
+import { ref, computed, onMounted, inject } from "vue";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { SOURCES, fetchHotlist, type HotItem } from "../lib/hotlist";
+import { isTauriRuntime } from "../lib/db";
 
 const toast = inject("toast") as (msg: string) => void;
 
-type Hot = {
-  rank: number;
-  title: string;
-  heat: string;
-  trend: "up" | "down";
-  tags: Array<[string, string]>;
-};
-
-const hotList = ref<Hot[]>([
-  { rank: 1, title: "二手名表回收价格出现两极分化，这些品牌不跌反涨", heat: "128.4万", trend: "up", tags: [["blue", "名表"], ["gold", "行情"]] },
-  { rank: 2, title: "年轻人开始把闲置包袋变现，回收平台日询价量翻倍", heat: "96.7万", trend: "up", tags: [["", "包袋"], ["green", "趋势"]] },
-  { rank: 3, title: "LV 老花包行情回暖，专柜同款二手价逼近公价", heat: "81.2万", trend: "up", tags: [["", "包袋"]] },
-  { rank: 4, title: "鉴定师揭秘：回收行业三个最常见的压价话术", heat: "64.9万", trend: "up", tags: [["red", "避坑"]] },
-  { rank: 5, title: "劳力士行情周报：哪些表款还在跌？", heat: "52.3万", trend: "down", tags: [["blue", "名表"]] },
-  { rank: 6, title: "爱马仕铂金包保值率实测：5 年还能回本多少", heat: "47.8万", trend: "up", tags: [["gold", "行情"]] },
-]);
-
-const tabs = ref(["抖音热榜", "微博热搜", "B 站热门"]);
-const activeTab = ref("抖音热榜");
+const sources = SOURCES;
+const activeTab = ref(SOURCES[0].id);
+const hotList = ref<HotItem[]>([]);
+const loading = ref(false);
+const error = ref("");
+const lastUpdated = ref("");
+const onlyRelated = ref(false);
 const manual = ref("");
 
-function switchTab(t: string) {
-  activeTab.value = t;
-  toast("切换热榜源：" + t + "（示例）");
+const shownList = computed(() => (onlyRelated.value ? hotList.value.filter((h) => h.related) : hotList.value));
+
+async function load(source = activeTab.value) {
+  loading.value = true;
+  error.value = "";
+  try {
+    hotList.value = await fetchHotlist(source);
+    lastUpdated.value = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+    hotList.value = [];
+    lastUpdated.value = "";
+  } finally {
+    loading.value = false;
+  }
+}
+
+function switchTab(id: string) {
+  activeTab.value = id;
+  load(id);
 }
 
 function refresh() {
-  toast("正在刷新（设计稿模拟）");
+  load(activeTab.value);
+  toast("正在刷新 " + sources.find((s) => s.id === activeTab.value)?.label);
+}
+
+function open(h: HotItem) {
+  if (!h.url) return;
+  if (isTauriRuntime()) {
+    openUrl(h.url);
+  } else {
+    window.open(h.url, "_blank");
+  }
 }
 
 function addManual() {
-  if (manual.value.trim()) {
-    toast("已加入热点列表：" + manual.value.trim() + "（设计稿演示）");
-    manual.value = "";
-  }
+  const text = manual.value.trim();
+  if (!text) return;
+  const hit = text.includes("回收") || text.includes("二手") || text.includes("奢侈品") ? "手动" : "";
+  hotList.value = [{ rank: 0, title: text, hot: "手动", url: "", related: hit !== "", hit }, ...hotList.value];
+  manual.value = "";
+  toast("已加入热点列表");
 }
+
+onMounted(() => load());
 </script>
 
 <template>
   <div>
     <div class="row" style="margin-bottom:14px;flex-wrap:wrap">
       <div class="hot-tabs" style="margin-bottom:0">
-        <button v-for="t in tabs" :key="t" class="hot-tab" :class="{ on: activeTab === t }" @click="switchTab(t)">{{ t }}</button>
+        <button v-for="s in sources" :key="s.id" class="hot-tab" :class="{ on: activeTab === s.id }" @click="switchTab(s.id)">{{ s.label }}</button>
       </div>
-      <div style="margin-left:auto;display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" @click="refresh">刷新</button>
-        <button class="btn btn-soft btn-sm" @click="toast('将热点接入生成工作台（设计稿演示）')">接入生成</button>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="filter-toggle">
+          <input type="checkbox" v-model="onlyRelated" />
+          <span>只看行业相关</span>
+        </label>
+        <button class="btn btn-ghost btn-sm" @click="refresh" :disabled="loading">{{ loading ? "加载中…" : "刷新" }}</button>
+        <button class="btn btn-soft btn-sm" @click="toast('将热点接入生成工作台：P2 待做')">接入生成</button>
       </div>
     </div>
-    <div v-for="h in hotList" :key="h.rank" class="hot-item">
-      <div class="hot-rank" :class="{ top: h.rank <= 3 }">{{ h.rank }}</div>
-      <div class="hot-body">
-        <div class="t">{{ h.title }}</div>
-        <div class="s">
-          <span v-if="h.trend === 'up'" class="up">▲ {{ h.rank <= 3 ? "12.4%" : "6.8%" }}</span>
-          <span v-else class="down">▼ 3.2%</span>
-          <span>示例数据</span><span>10 分钟更新</span>
+
+    <div v-if="error" class="hot-error">
+      <p>热榜接口暂不可用（{{ error }}）——请检查网络后点「刷新」，或手动添加话题兜底。</p>
+    </div>
+
+    <div v-if="loading" style="color:var(--text-faint);font-size:13px;padding:12px 0">正在加载 {{ sources.find((s) => s.id === activeTab)?.label }}…</div>
+
+    <template v-else>
+      <div class="scroll-limit">
+        <div v-for="h in shownList" :key="h.rank + '-' + h.title" class="hot-item" :class="{ clickable: h.url }" @click="open(h)">
+          <div class="hot-rank" :class="{ top: h.rank >= 1 && h.rank <= 3 }">{{ h.rank }}</div>
+          <div class="hot-body">
+            <div class="t">{{ h.title }}</div>
+            <div class="s">
+              <span class="up">▲</span>
+              <span v-if="h.related" class="tag" style="background:var(--accent);color:#0b0e13">行业相关</span>
+              <span v-if="h.hit">{{ h.hit }}</span>
+              <span v-if="lastUpdated">更新于 {{ lastUpdated }}</span>
+            </div>
+          </div>
+          <div class="hot-val"><div class="hv">{{ h.hot }}</div><div class="hl">热度</div></div>
+        </div>
+        <div v-if="shownList.length === 0 && !error" style="color:var(--text-faint);font-size:13px;padding:12px 0">
+          {{ onlyRelated ? "当前榜单暂无行业相关条目 — 试试其他榜单或取消筛选" : "暂无数据" }}
         </div>
       </div>
-      <div class="hot-tags">
-        <span v-for="t in h.tags" :key="t[1]" class="tag" :class="t[0]">{{ t[1] }}</span>
-      </div>
-      <div class="hot-val"><div class="hv">{{ h.heat }}</div><div class="hl">热度</div></div>
-    </div>
+      <div style="color:var(--text-faint);font-size:12px;margin-top:6px">数据来源：vvhan 热榜聚合 · 点击条目在浏览器打开原文 · 实时刷新</div>
+    </template>
+
     <div class="manual-input">
       <input class="input" v-model="manual" placeholder="手动输入热点 / 话题（接口不可用时兜底）…" @keydown.enter="addManual" />
       <button class="btn btn-primary btn-sm" @click="addManual">添加</button>
     </div>
   </div>
 </template>
+
+<style scoped>
+.hot-error {
+  background: rgba(229, 83, 75, 0.08);
+  border: 1px solid rgba(229, 83, 75, 0.35);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.hot-error p { margin: 0; }
+.hot-item.clickable { cursor: pointer; }
+.hot-item.clickable:hover .t { color: var(--accent); }
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.filter-toggle input { accent-color: var(--accent); }
+</style>
