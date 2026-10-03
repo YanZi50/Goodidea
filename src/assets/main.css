@@ -72,6 +72,10 @@ input,select,textarea{font-family:inherit;color:inherit}
 .toggle-row input:checked + .toggle-track{background:var(--accent);border-color:var(--accent)}
 .toggle-row input:checked + .toggle-track .toggle-knob{transform:translateX(16px);background:#241A08}
 .toggle-text{font-size:13px;color:var(--text-muted)}
+/* 单篇分析 chip（带 × 退出） */
+.doc-chip{display:inline-flex;align-items:center;gap:6px;padding-right:8px}
+.doc-chip-x{background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;border-radius:4px}
+.doc-chip-x:hover{background:rgba(0,0,0,.15)}
 .btn-danger-ghost{background:transparent;border-color:var(--border);color:var(--red)}
 .btn-danger-ghost:hover{background:var(--red-soft);border-color:transparent}
 .btn-sm{padding:5px 11px;font-size:12.5px}

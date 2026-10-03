@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listDocuments, countChunks, listAllChunkContent, listGroups } from "../lib/db";
-import { onDataChanged } from "../lib/bus";
+import { onDataChanged, onAnalyzeDocRequest } from "../lib/bus";
 import {
   loadAIConfig,
   runGeneration,
@@ -22,31 +22,55 @@ const analyzing = ref(false);
 const result = ref("");
 const lastMeta = ref<{ tokens: string; cost: string; at: string } | null>(null);
 
-// ---- 分析范围：全部 / 未分组 / 按组 ----
+// ---- 分析范围：全部 / 未分组 / 按组 / 单篇 ----
 const groups = ref<{ id: number; name: string; doc_count: number }[]>([]);
 const scope = ref<"all" | "none" | number>("all"); // all=全部 / none=未分组 / number=组 id
-const scopeLabel = computed(() =>
-  scope.value === "none" ? "未分组文档" : typeof scope.value === "number" ? `分组「${groupName(scope.value)}」` : "全部文档"
-);
+const docScope = ref<number | null>(null); // 单篇分析（与 scope 互斥）
+const scopeLabel = computed(() => {
+  if (docScope.value !== null) {
+    const d = docsCache.value.find((x) => x.id === docScope.value);
+    return `单篇「${d?.filename ?? `#${docScope.value}`}」`;
+  }
+  return scope.value === "none" ? "未分组文档" : typeof scope.value === "number" ? `分组「${groupName(scope.value)}」` : "全部文档";
+});
+
+// 增量分析基准（localStorage 记上次分析时刻；文档 created_at 晚于基准者视为新增）
+const LAST_AT_KEY = "goodidea.lastAnalysisAt.v1";
+const incrOnly = ref(false);
+function lastAnalysisAt(): number {
+  return Number(localStorage.getItem(LAST_AT_KEY) ?? "0") || 0;
+}
+function markAnalyzed(): void {
+  localStorage.setItem(LAST_AT_KEY, String(Date.now()));
+}
 
 function groupName(id: number): string {
   return groups.value.find((g) => g.id === id)?.name ?? `#${id}`;
 }
 
-/** 当前范围内的文档 id（按组时为该组文档） */
+/** 当前范围内的文档 id（单篇/按组/增量过滤）；undefined = 全部 */
 function scopeDocIds(): number[] | undefined {
-  if (scope.value === "all") return undefined;
-  const ids = docsCache.value
-    .filter((d) => (scope.value === "none" ? d.group_id === null : d.group_id === scope.value))
-    .map((d) => d.id);
-  return ids.length > 0 ? ids : undefined;
+  if (docScope.value !== null) return [docScope.value];
+  let ids: number[] | undefined;
+  if (scope.value === "all") ids = undefined;
+  else
+    ids = docsCache.value
+      .filter((d) => (scope.value === "none" ? d.group_id === null : d.group_id === scope.value))
+      .map((d) => d.id);
+  if (incrOnly.value) {
+    const base = lastAnalysisAt();
+    const fresh = docsCache.value.filter((d) => base > 0 && new Date(d.created_at).getTime() > base).map((d) => d.id);
+    ids = ids === undefined ? fresh : ids.filter((id) => fresh.includes(id));
+  }
+  return ids && ids.length > 0 ? ids : undefined;
 }
-const docsCache = ref<{ id: number; group_id: number | null }[]>([]);
+const docsCache = ref<{ id: number; group_id: number | null; filename: string; created_at: string }[]>([]);
 
 async function refresh() {
   docsCache.value = await listDocuments();
   groups.value = await listGroups();
   if (typeof scope.value === "number" && !groups.value.some((g) => g.id === scope.value)) scope.value = "all";
+  if (docScope.value !== null && !docsCache.value.some((d) => d.id === docScope.value)) docScope.value = null;
   await refreshScopeStats();
   today.value = todayCost();
   modelLabel.value = loadAIConfig()?.label ?? "";
@@ -62,7 +86,17 @@ onMounted(() => {
   refresh();
   // 文档库数据变更（建组/删组/移组/导入/删除）实时同步本页分组与统计，无需手动刷新
   const off = onDataChanged(() => void refresh());
-  onUnmounted(off);
+  // 文档库行内「分析」→ 本页单篇分析
+  const offDoc = onAnalyzeDocRequest((id) => {
+    scope.value = "all";
+    docScope.value = id;
+    incrOnly.value = false;
+    void refreshScopeStats();
+  });
+  onUnmounted(() => {
+    off();
+    offDoc();
+  });
 });
 
 /** AI 输出（Markdown）→ 消毒后的 HTML */
@@ -77,9 +111,16 @@ async function runAnalysis() {
     toast("请先到「设置 → 模型接入」配置 API Key 与模型 ID");
     return;
   }
+  if (incrOnly.value && lastAnalysisAt() === 0) {
+    toast("尚无增量基准，本次先做全量分析并记录基准（下次起只分析新增）");
+  }
   const ids = scopeDocIds();
   if (scope.value !== "all" && ids === undefined) {
     toast(`${scopeLabel.value}暂无文档 — 先在文档库把文档移入该分组`);
+    return;
+  }
+  if (docScope.value !== null && ids === undefined) {
+    toast("该文档没有可分析的内容（可能是空文件）");
     return;
   }
   const chunks = await listAllChunkContent(60, ids);
@@ -96,7 +137,7 @@ async function runAnalysis() {
     "2) 指出问题：内部矛盾、信息缺口、低质/冗余段落、改进建议，逐条列出并标注优先级。",
     "使用 Markdown 结构输出：## 核心要点 / ## 指出问题。",
   ].join("\n");
-  const prompt = `以下是知识库内容（范围：${scopeLabel.value}，截取前 60 块）：\n\n${chunks.join("\n---\n")}`;
+  const prompt = `以下是知识库内容（范围：${scopeLabel.value}${incrOnly.value ? "（仅新增）" : ""}，截取前 60 块）：\n\n${chunks.join("\n---\n")}`;
 
   try {
     const res = await runGeneration(cfg, system, prompt);
@@ -109,12 +150,32 @@ async function runAnalysis() {
       cost: `¥${cost.amount.toFixed(2)}`,
       at: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
     };
-    toast(`分析完成 · ${lastMeta.value.cost}`);
+    if (incrOnly.value) markAnalyzed();
+    toast(`分析完成 · ${lastMeta.value.cost}${incrOnly.value ? "（增量基准已更新）" : ""}`);
   } catch (err) {
     toast(`分析失败：${err instanceof Error ? err.message : String(err)}`);
   } finally {
     analyzing.value = false;
+    incrOnly.value = false;
   }
+}
+
+/** 点击「仅分析新增」：标记增量模式并立即执行 */
+function runIncremental() {
+  incrOnly.value = true;
+  void runAnalysis();
+}
+
+/** 切换单篇/范围：设置任一即清另一 */
+function setScope(v: "all" | "none" | number) {
+  docScope.value = null;
+  scope.value = v;
+  void refreshScopeStats();
+}
+
+function clearDocScope() {
+  docScope.value = null;
+  void refreshScopeStats();
 }
 </script>
 
@@ -129,10 +190,14 @@ async function runAnalysis() {
     <div class="card" style="margin-bottom:14px">
       <div class="card-title">智能分析 <span class="hint">范围可切换</span></div>
       <div class="scope-bar">
-        <button class="chip" :class="{ on: scope === 'all' }" @click="scope = 'all'; refreshScopeStats()">全部文档</button>
-        <button class="chip" :class="{ on: scope === 'none' }" @click="scope = 'none'; refreshScopeStats()">未分组</button>
-        <button v-for="g in groups" :key="g.id" class="chip" :class="{ on: scope === g.id }" @click="scope = g.id; refreshScopeStats()">{{ g.name }} {{ g.doc_count }}</button>
-        <span v-if="groups.length === 0" style="color:var(--text-faint);font-size:12px">暂无分组 — 到文档库新建分组并移入文档后可聚焦分析</span>
+        <button class="chip" :class="{ on: scope === 'all' && docScope === null }" @click="setScope('all')">全部文档</button>
+        <button class="chip" :class="{ on: scope === 'none' && docScope === null }" @click="setScope('none')">未分组</button>
+        <button v-for="g in groups" :key="g.id" class="chip" :class="{ on: scope === g.id && docScope === null }" @click="setScope(g.id)">{{ g.name }} {{ g.doc_count }}</button>
+        <span v-if="docScope !== null" class="chip on doc-chip">
+          单篇「{{ docsCache.find((d) => d.id === docScope)?.filename ?? `#${docScope}` }}」
+          <button class="doc-chip-x" title="返回范围分析" @click="clearDocScope">×</button>
+        </span>
+        <span v-if="groups.length === 0 && docScope === null" style="color:var(--text-faint);font-size:12px">暂无分组 — 到文档库新建分组并移入文档后可聚焦分析</span>
       </div>
       <div v-if="analyzing" style="color:var(--text-faint);font-size:13px;padding:10px 0">正在分析{{ scopeLabel }}（约 30–90 秒）…</div>
       <div v-else-if="result" class="scroll-limit"><div class="md-render" v-html="renderedResult"></div></div>
@@ -144,9 +209,9 @@ async function runAnalysis() {
       </div>
       <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
         <button class="btn btn-primary" :disabled="analyzing" @click="runAnalysis">
-          <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 15l4-6 3 4 5-7" /></svg>{{ analyzing ? "分析中…" : (scope !== 'all' ? "开始分析该范围" : "重新分析全部") }}
+          <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 15l4-6 3 4 5-7" /></svg>{{ analyzing ? "分析中…" : (docScope !== null ? "分析这篇" : scope !== 'all' ? "开始分析该范围" : "重新分析全部") }}
         </button>
-        <button class="btn btn-ghost" @click="toast('增量分析将在 P3 接入')">仅分析新增</button>
+        <button class="btn btn-ghost" :disabled="analyzing || docScope !== null" title="只分析上次分析后新入库的文档" @click="runIncremental">仅分析新增</button>
       </div>
     </div>
   </div>

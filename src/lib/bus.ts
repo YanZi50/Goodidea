@@ -13,3 +13,16 @@ export function onDataChanged(h: Handler): () => void {
 export function emitDataChanged(): void {
   for (const h of [...handlers]) h();
 }
+
+// ---- 单篇分析请求（文档库行内「分析」→ 分析页） ----
+type DocRequestHandler = (docId: number) => void;
+const docRequestHandlers = new Set<DocRequestHandler>();
+
+export function onAnalyzeDocRequest(h: DocRequestHandler): () => void {
+  docRequestHandlers.add(h);
+  return () => docRequestHandlers.delete(h);
+}
+
+export function emitAnalyzeDocRequest(docId: number): void {
+  for (const h of [...docRequestHandlers]) h(docId);
+}
