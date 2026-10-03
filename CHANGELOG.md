@@ -70,6 +70,6 @@
 - 价格表收录 DeepSeek：`deepseek-v4-flash`（1元/2元 每百万 tokens）、`deepseek-v4-pro`（3元/6元），`deepseek-chat` 旧名兼容映射（官方 2026-07-24 弃用后等价 v4-flash 非思考模式）；接入方式不变——设置页填 `https://api.deepseek.com` + API Key 即可（OpenAI 兼容）。价格以官方定价页为准，峰谷/优惠时段可能有差异（@78e6559）
 
 ### Added（P2d：DeepSeek V4 思考模式开关 + 文档库体验修复）
-- 新增**思考模式开关**（设置 → 模型接入，默认关闭）：DeepSeek V4 默认启用思考，reasoning 与正文共享 max_tokens 且按输出价计费（实测 300 配额下正文被吃光、偏慢偏贵）；关闭时经 `providerOptions.openai.reasoningEffort="none"` 透传（官方 Chat Completions 支持 none 关闭），开启时传 "high"；仅 deepseek 模型生效，其他兼容端点不传。实测：none 模式下 in=26/out=100/reasoning=0、正文完整，费用约思考模式 1/3；BUG-009 已记录（@待回填）
-- 文档库修复：①行内移组「未分组」选项改用 select 原生空值 + 保存时转 null，消除 null 绑定歧义（此前可能把 group_id 写成空字符串导致文档从「未分组」视图消失）；②批量导入不再逐篇弹 toast（单元素 toast 会闪屏覆盖），改按钮内进度显示「导入中 i/N…」，成功/重复静默累计、失败逐篇提示、完成汇总一条（含归入分组信息）（@待回填）
-- 验证：vue-tsc + vite build 全绿（397 模块）；思考模式开关经 DeepSeek 官方 API 直连实测（none/high 行为符合预期）；设置页经 HTTP 通道渲染 0 布局溢出、0 JS 错误（@待回填）
+- 新增**思考模式开关**（设置 → 模型接入，默认关闭）：DeepSeek V4 默认启用思考，reasoning 与正文共享 max_tokens 且按输出价计费（实测 300 配额下正文被吃光、偏慢偏贵）；关闭时经 `providerOptions.openai.reasoningEffort="none"` 透传（官方 Chat Completions 支持 none 关闭），开启时传 "high"；仅 deepseek 模型生效，其他兼容端点不传。实测：none 模式下 in=26/out=100/reasoning=0、正文完整，费用约思考模式 1/3；BUG-009 已记录（@0605072）
+- 文档库修复：①行内移组「未分组」选项改用 select 原生空值 + 保存时转 null，消除 null 绑定歧义（此前可能把 group_id 写成空字符串导致文档从「未分组」视图消失）；②批量导入不再逐篇弹 toast（单元素 toast 会闪屏覆盖），改按钮内进度显示「导入中 i/N…」，成功/重复静默累计、失败逐篇提示、完成汇总一条（含归入分组信息）（@0605072）
+- 验证：vue-tsc + vite build 全绿（397 模块）；思考模式开关经 DeepSeek 官方 API 直连实测（none/high 行为符合预期）；设置页经 HTTP 通道渲染 0 布局溢出、0 JS 错误（@0605072）
