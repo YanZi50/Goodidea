@@ -28,3 +28,6 @@
 ### Added（P1 核心闭环）
 - 文档摄取闭环：拖拽 / 文件选择双通道导入 `.txt` / `.md` / `.docx`（mammoth 解析）；SHA-256 内容哈希去重（重复文件跳过并提示）；段落边界分块（超长段按句子硬切，≤1500 字符/块）；写入 `documents` + `chunks`；文档列表 / 分块总数 / 最近入库全部改为 SQLite 真实数据，空态引导文案；删除文档显式级联清理 chunks（不依赖 SQLite 外键默认关闭行为）；窗口 `dragDropEnabled: false` 启用 WebView 原生拖拽（@b60dc50）
 - 验证：vue-tsc + vite build 全绿（含 mammoth 类型）；cargo check 通过；文档库空态渲染 0 控制台错误（@b60dc50）
+- AI 接入（Vercel AI SDK v7 + @ai-sdk/openai 4.x，OpenAI 兼容，默认指向火山方舟 `/api/v3`）：设置页「模型接入」表单（显示名 / 模型 ID / Base URL / API Key，密钥仅存本机 localStorage，不入库）；全库分析（读取前 60 块 → 浓缩要点 + 指出问题，Markdown 输出）；生成工作台真实流式生成（textStream 逐段渲染 + 光标 + 完成统计）；消耗模块（常量价格表按模型计价，当日 / 近 7 日 / 近 30 日 / 按模型累计持久化到 localStorage，UsageView 全部真实化）；未配置模型时界面明确引导（@e1c79d5）
+- 已知优化项（非阻塞）：引入 AI SDK 后前端 bundle ≈ 995KB（minify），vite 警告 >500KB；P2 按视图 dynamic import 分包（@e1c79d5）
+- 验证：vue-tsc + vite build 全绿（389 模块）；设置页 / 工作台渲染 0 控制台错误（@e1c79d5）
