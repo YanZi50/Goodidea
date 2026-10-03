@@ -104,7 +104,7 @@
 ## BUG-009：DeepSeek V4 默认思考模式吃光 max_tokens，正文输出为空（且偏慢偏贵）
 
 - **日期**：2026-10-03
-- **关联 commit**：@待回填
+- **关联 commit**：@584c9db
 - **所属模块**：AI 接入（src/lib/ai.ts + 设置页思考模式开关）
 - **症状**：实测 `deepseek-v4-flash` 默认请求（不传思考参数）下 `max_tokens=300` 时，usage 输出 300 tokens **全部为 reasoning_tokens，正文为空**；此前实测 750 输出中 695 为 reasoning（按输出价计费、偏慢偏贵）。用户在默认思考模式下可能遇到「分析结果空白 / 内容很短」且费用偏高。
 - **根因**：DeepSeek V4 默认启用思考模式（官方文档确认 "enabled by default"），reasoning 与正文**共享 max_tokens 配额**；小 max_tokens 下 reasoning 先吃掉配额，正文无剩余。
