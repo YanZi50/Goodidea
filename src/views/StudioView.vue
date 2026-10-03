@@ -149,6 +149,55 @@ async function copyText() {
   await navigator.clipboard.writeText(output.value);
   toast("已复制到剪贴板");
 }
+
+// ---- 导出分镜表：解析输出中的时间轴分段 【0-3s · 钩子】… ----
+interface ShotRow {
+  n: number;
+  t: string;
+  tag: string;
+  content: string;
+}
+const shotOpen = ref(false);
+const shotRows = ref<ShotRow[]>([]);
+
+function parseShots(text: string): ShotRow[] {
+  const re = /【\s*([\d.:]+)\s*-\s*([\d.:]+)s?\s*(?:·|,|，|\|)?\s*([^】]*)】/g;
+  const segs: { a: string; b: string; tag: string; i: number; len: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    segs.push({ a: m[1], b: m[2], tag: m[3].trim(), i: m.index, len: m[0].length });
+  }
+  const rows: ShotRow[] = [];
+  for (let k = 0; k < segs.length; k++) {
+    const s = segs[k];
+    const bodyStart = s.i + s.len;
+    const bodyEnd = k + 1 < segs.length ? segs[k + 1].i : text.length;
+    const body = text.slice(bodyStart, bodyEnd).replace(/^\n+|\n+$/g, "").trim();
+    rows.push({ n: k + 1, t: `${s.a}-${s.b}s`, tag: s.tag || "分镜", content: body });
+  }
+  return rows;
+}
+
+function exportShots() {
+  if (!output.value) {
+    toast("还没有生成内容");
+    return;
+  }
+  const rows = parseShots(output.value);
+  if (rows.length === 0) {
+    toast("未识别到时间轴分段 — 请用【0-3s · 钩子】格式生成后再导出");
+    return;
+  }
+  shotRows.value = rows;
+  shotOpen.value = true;
+  toast(`已解析 ${rows.length} 个分镜`);
+}
+
+function copyShots() {
+  const lines = ["分镜\t时间\t标签\t内容", ...shotRows.value.map((r) => `${r.n}\t${r.t}\t${r.tag}\t${r.content.replace(/\n/g, " ")}`)];
+  void navigator.clipboard.writeText(lines.join("\n"));
+  toast("分镜表已复制 — 可直接粘贴到 Excel / 飞书表格");
+}
 </script>
 
 <template>
@@ -211,9 +260,46 @@ async function copyText() {
       </div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn btn-green btn-sm" @click="copyText">复制全文</button>
-        <button class="btn btn-ghost btn-sm" @click="toast('导出分镜表将在 P1 二期接入')">导出分镜表</button>
+        <button class="btn btn-ghost btn-sm" @click="exportShots" :disabled="!output || generating">导出分镜表</button>
         <button class="btn btn-ghost btn-sm" :disabled="generating" @click="generate">重新生成</button>
+      </div>
+      <div v-if="shotOpen" class="shot-panel">
+        <div class="shot-head">
+          <span>分镜表（{{ shotRows.length }} 镜）</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-soft btn-sm" @click="copyShots">复制表格</button>
+            <button class="btn btn-ghost btn-sm" @click="shotOpen = false">关闭</button>
+          </div>
+        </div>
+        <table class="shot-table">
+          <thead><tr><th>#</th><th>时间</th><th>标签</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr v-for="r in shotRows" :key="r.n">
+              <td>{{ r.n }}</td>
+              <td>{{ r.t }}</td>
+              <td><span class="tag">{{ r.tag }}</span></td>
+              <td style="white-space:pre-wrap">{{ r.content }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="font-size:12px;color:var(--text-faint)">「复制表格」输出制表符分隔（分镜/时间/标签/内容），可直接粘贴到 Excel 或飞书表格</div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.shot-panel {
+  margin-top: 12px;
+  border: 1px solid rgba(232, 179, 106, 0.3);
+  border-radius: 10px;
+  background: rgba(232, 179, 106, 0.05);
+  padding: 10px 12px;
+}
+.shot-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--text-muted); }
+.shot-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.shot-table th, .shot-table td { border: 1px solid rgba(255, 255, 255, 0.08); padding: 6px 8px; text-align: left; vertical-align: top; }
+.shot-table th { color: var(--text-muted); background: rgba(255, 255, 255, 0.04); white-space: nowrap; }
+.shot-table td:first-child { width: 36px; color: var(--text-faint); text-align: center; }
+.shot-table td:nth-child(2) { width: 70px; white-space: nowrap; }
+</style>
