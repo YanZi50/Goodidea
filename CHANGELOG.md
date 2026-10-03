@@ -94,6 +94,6 @@
 - 验证：vue-tsc + vite build 全绿（399 模块）；解析逻辑经 node 单测（4 镜正确解析、无分段返回 0）；生成工作台经 HTTP 通道渲染 0 布局溢出；真机导出粘贴流程待确认（@29d9835）
 
 ### Added（P2 收尾：价格表迁 SQLite，设置页可维护——全项目最后占位按钮清零）
-- **迁移 v3**：Rust 侧新增 `billing_rules` 表（model 主键 / input_price / output_price / updated_at），随既有迁移链自动升级（@待回填）
-- **价格表可维护**：计费改为「db 优先、常量兜底」——启动时 `reloadPriceTable()` 从库加载（失败静默回退内置常量）；设置页「编辑价格表」inline 展开表格，可增删改任意模型价格（按模型名包含匹配），保存批量 upsert 并即时重载；消耗统计与顶栏今日消耗按新价重算（@待回填）
-- 验证：cargo check 通过（迁移 v3 编译通过）、vue-tsc + vite build 全绿（399 模块，动态 import 警告已消除）；设置页经 HTTP 通道渲染 0 布局溢出；真机保存/重算流程待确认（@待回填）
+- **迁移 v3**：Rust 侧新增 `billing_rules` 表（model 主键 / input_price / output_price / updated_at），随既有迁移链自动升级（@3b2ab7a）
+- **价格表可维护**：计费改为「db 优先、常量兜底」——启动时 `reloadPriceTable()` 从库加载（失败静默回退内置常量）；设置页「编辑价格表」inline 展开表格，可增删改任意模型价格（按模型名包含匹配），保存批量 upsert 并即时重载；消耗统计与顶栏今日消耗按新价重算（@3b2ab7a）
+- 验证：cargo check 通过（迁移 v3 编译通过）、vue-tsc + vite build 全绿（399 模块，动态 import 警告已消除）；设置页经 HTTP 通道渲染 0 布局溢出；真机保存/重算流程待确认（@3b2ab7a）
