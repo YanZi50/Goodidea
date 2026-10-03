@@ -107,3 +107,7 @@
 - **修复亮暗滑块无响应**（BUG-011）：Sidebar 把 inject 的亮度 ref 误按普通对象绑定 `v-model="brightness.value"`，Vue script setup 顶层 ref 在模板自动解包导致 `.value` 取到 undefined、赋值失效——改为 `inject<Ref<number>>` + 模板直接 `v-model.number="brightness"`，滑块拖拽即时驱动整页 `filter: brightness()`（@0aa86bc）
 - **生成工作台输出区放大**：两栏比例 2fr:3fr → 3fr:5fr（输出区约占内容区 62%，更宽）；输出卡片 min-height 340px → 420px；**去掉输出区内部 320px 限高滚动**，长生成内容完整展开、随页面滚动查看，不再被截断滚动（@0aa86bc）
 - 验证：vue-tsc + vite build 全绿（399 模块）；Edge headless 直连 #studio 截图确认输出区加宽、全展开、0 布局溢出；滑块交互修复原理核验（解包语义）并记录 BUG-011，真机拖动待用户确认（@0aa86bc）
+
+### Changed（P3 UX 反馈三轮：亮度滑块 → 浅色/暗色主题切换）
+- **主题切换**：移除亮度滑块，改为侧栏底部「浅色 / 暗色」两个切换按钮（当前主题高亮，太阳/月亮图标）；整套 UI 基于 CSS 变量换肤——新增 `[data-theme="light"]` 变量覆盖（含按钮对比色、表格边框、滚动条、toast 阴影等硬编码色针对性覆盖），选择持久化到 localStorage 下次启动沿用（@8284565）
+- 验证：vue-tsc + vite build 全绿（399 模块）；分别以浅色/暗色为默认构建，Edge headless 直连 #library 截图确认两套主题整体渲染协调、切换按钮正常、0 布局溢出；最终产物默认暗色（@8284565）
