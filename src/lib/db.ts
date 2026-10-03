@@ -160,3 +160,19 @@ export async function deleteDocument(id: number): Promise<void> {
   await d.execute("DELETE FROM chunks WHERE doc_id = $1", [id]);
   await d.execute("DELETE FROM documents WHERE id = $1", [id]);
 }
+
+/** 全库内容（按文档/块序拼接，供全库分析；limit 截断防止超长 prompt） */
+export async function listAllChunkContent(limit = 60): Promise<string[]> {
+  if (!isTauriRuntime()) return [];
+  try {
+    const d = await getDb();
+    const rows = await d.select<{ content: string }[]>(
+      "SELECT content FROM chunks ORDER BY doc_id, seq LIMIT $1",
+      [limit]
+    );
+    return rows.map((r) => r.content);
+  } catch (err) {
+    console.error("[db] listAllChunkContent failed", err);
+    return [];
+  }
+}
