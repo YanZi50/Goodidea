@@ -46,4 +46,10 @@
 - bundle 分包：vite rolldown manualChunks 将 AI SDK（vendor-ai）、文档解析 mammoth（vendor-doc）、Markdown（vendor-md）、Vue 运行时（vendor-vue）拆为独立 chunk，主包 1068KB → 42KB，缓存复用提升；vendor-ai 583KB 为 AI SDK 固有体积，警告保留，彻底方案（视图级 dynamic import）留待后续（@c9253ee）
 - 验证：vue-tsc + vite build 全绿（396 模块）；cargo check 通过（tauri-plugin-http 2.8.0）；热点页经 HTTP 通道渲染 0 JS 错误（vvhan 在本验证环境不可达属预期，错误态正常显示）（@c9253ee）
 - BUG-008：vite rolldown 分包后 file:// 内联验证法失效（modulepreload 链接与 chunk 相对 import 被 CORS 拦截）；验证通道切换为本机 HTTP 服务（127.0.0.1:8765）+ shot.py URL 模式，与 Tauri 真机自定义协议加载行为一致（@0667bf5）
+
+### Added（P2b 文档分组 + 批量删除 + 按组分析）
+- DB 层：`tags` 字段启用（JSON 数组多标签）；`updateDocumentTags` / `deleteDocuments`（批量，chunks 级联）/ `listGroups`（跨文档去重）/ `parseTags`；`countChunks`、`listAllChunkContent` 支持按 docIds 范围查询（@3f8ea0c）
+- 文档库：全选/多选 checkbox + 批量操作条（删除选中 / 设置分组 / 清除分组）；分组筛选 chips；行内分组编辑器（已有分组点选 + 新建 + 保存）；分组列显示金色标签，未分组显示占位（@b37b4a7）
+- 智能分析：范围切换（全部文档 / 按分组），统计卡与内容读取随范围变化，提示文案自适应；分组无文档时明确引导（@672bd21）
+- 验证：vue-tsc + vite build 全绿（397 模块）；文档库 / 智能分析经 HTTP 通道渲染 0 JS 错误（vvhan 请求失败为预期降级，与本次改动无关）（@672bd21）
 - 价格表收录 DeepSeek：`deepseek-v4-flash`（1元/2元 每百万 tokens）、`deepseek-v4-pro`（3元/6元），`deepseek-chat` 旧名兼容映射（官方 2026-07-24 弃用后等价 v4-flash 非思考模式）；接入方式不变——设置页填 `https://api.deepseek.com` + API Key 即可（OpenAI 兼容）。价格以官方定价页为准，峰谷/优惠时段可能有差异（@78e6559）
