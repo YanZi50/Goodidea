@@ -3,6 +3,7 @@ import { ref, computed, onMounted, inject } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SOURCES, fetchHotlist, type HotItem } from "../lib/hotlist";
 import { isTauriRuntime } from "../lib/db";
+import { emitUseHotspot } from "../lib/bus";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -60,6 +61,23 @@ function addManual() {
   toast("已加入热点列表");
 }
 
+/** 接入生成：话题 → 生成工作台热点参考 */
+function useForGenerate(h: HotItem) {
+  location.hash = "studio";
+  emitUseHotspot(h.title);
+  toast(`已接入生成工作台：${h.title}`);
+}
+
+/** 顶部「接入生成」：接入当前列表第一条（行业相关优先） */
+function useFirstForGenerate() {
+  const list = shownList.value;
+  if (list.length === 0) {
+    toast("当前列表为空 — 先加载或手动添加话题");
+    return;
+  }
+  useForGenerate(list[0]);
+}
+
 onMounted(() => load());
 </script>
 
@@ -75,7 +93,7 @@ onMounted(() => load());
           <span>只看行业相关</span>
         </label>
         <button class="btn btn-ghost btn-sm" @click="refresh" :disabled="loading">{{ loading ? "加载中…" : "刷新" }}</button>
-        <button class="btn btn-soft btn-sm" @click="toast('将热点接入生成工作台：P2 待做')">接入生成</button>
+        <button class="btn btn-soft btn-sm" @click="useFirstForGenerate" :disabled="shownList.length === 0">接入生成</button>
       </div>
     </div>
 
@@ -98,7 +116,13 @@ onMounted(() => load());
               <span v-if="lastUpdated">更新于 {{ lastUpdated }}</span>
             </div>
           </div>
-          <div class="hot-val"><div class="hv">{{ h.hot }}</div><div class="hl">热度</div></div>
+          <div class="hot-val">
+            <div class="hv">{{ h.hot }}</div>
+            <div class="hl">热度</div>
+          </div>
+          <button class="icon-btn hot-gen" title="接入生成工作台" @click.stop="useForGenerate(h)">
+            <svg viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+          </button>
         </div>
         <div v-if="shownList.length === 0 && !error" style="color:var(--text-faint);font-size:13px;padding:12px 0">
           {{ onlyRelated ? "当前榜单暂无行业相关条目 — 试试其他榜单或取消筛选" : "暂无数据" }}
@@ -137,4 +161,10 @@ onMounted(() => load());
   user-select: none;
 }
 .filter-toggle input { accent-color: var(--accent); }
+.hot-item { position: relative; }
+.hot-gen {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  opacity: 0; transition: opacity .15s;
+}
+.hot-item:hover .hot-gen { opacity: 1; }
 </style>

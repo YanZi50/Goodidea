@@ -26,3 +26,16 @@ export function onAnalyzeDocRequest(h: DocRequestHandler): () => void {
 export function emitAnalyzeDocRequest(docId: number): void {
   for (const h of [...docRequestHandlers]) h(docId);
 }
+
+// ---- 热点接入生成工作台（热点页条目 → 生成页热点参考） ----
+type HotspotHandler = (topic: string) => void;
+const hotspotHandlers = new Set<HotspotHandler>();
+
+export function onUseHotspot(h: HotspotHandler): () => void {
+  hotspotHandlers.add(h);
+  return () => hotspotHandlers.delete(h);
+}
+
+export function emitUseHotspot(topic: string): void {
+  for (const h of [...hotspotHandlers]) h(topic);
+}
