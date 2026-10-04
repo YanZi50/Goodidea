@@ -180,5 +180,5 @@
 - **AI 请求改走 Rust 网络栈**：生成/分析/测试连接在 Tauri 运行时统一用 tauri-plugin-http（reqwest，无浏览器 CORS 概念），替代此前 WebView2 原生 fetch——中转类 OpenAI 兼容端点（如 aigd.top）响应不带 `Access-Control-Allow-Origin` 头时不再报 `Failed to fetch`；DeepSeek/火山官方端点不受影响（@2d37721）
 - **capabilities 放行任意端点**：http:default allow 放宽为 `https://**` + `http://**`（含局域网自建 OpenAI 兼容端点），不再逐域登记（@2d37721）
 - **web 预览限制说明**：浏览器预览无插件仍受 CORS 约束，接不通的端点请在桌面应用内使用（@2d37721）
-- 验证：vue-tsc + vite build 全绿（399 模块）；cargo check Finished；本机实测 aigd.top `/v1/models` 与 `/v1/chat/completions` 直连均 200（key 有效、gpt-5.5 存在、响应无 ACAO 头=此前拦截源）；真机测试待确认（@待回填）
+- 验证：vue-tsc + vite build 全绿（399 模块）；cargo check Finished；本机实测 aigd.top `/v1/models` 与 `/v1/chat/completions` 直连均 200（key 有效、gpt-5.5 存在、响应无 ACAO 头=此前拦截源）；真机测试待确认（@2d37721）
 - **已知外部事项（非应用缺陷）**：实测 aigd.top 当前返回 `403 insufficient balance`——该中转账号余额不足，需充值后才能使用；充值后请重新点「测试」验证
