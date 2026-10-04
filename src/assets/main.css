@@ -36,6 +36,7 @@
 [data-theme="light"] .scroll-limit::-webkit-scrollbar-thumb:hover,.scroll-limit-sm::-webkit-scrollbar-thumb:hover,.out-area::-webkit-scrollbar-thumb:hover{background:#ADB9C7}
 [data-theme="light"] .hot-num{color:var(--text-faint)}
 [data-theme="light"] .hot-dot{background:var(--accent)}
+[data-theme="light"] .md-render table tr:hover td{background:rgba(0,0,0,.03)}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%}
 html,body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
@@ -260,6 +261,24 @@ table.tbl tr:hover .row-actions{opacity:1}
 .md-render code{background:var(--surface-2);padding:1px 5px;border-radius:5px;font-size:12.5px}
 .md-render blockquote{border-left:3px solid var(--surface-2);margin:8px 0;padding:2px 10px;color:var(--text-muted)}
 .md-render hr{border:none;border-top:1px solid var(--surface-2);margin:12px 0}
+/* 分析结果诊断表（模型 Markdown 表格）：列间强分隔，具体问题=红 / 改进建议=绿 */
+.md-render table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;margin:10px 0;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm)}
+.md-render table th{background:var(--surface-3);color:var(--text);font-weight:600;padding:8px 10px;text-align:left;font-size:12.5px}
+.md-render table td{padding:9px 10px;border-top:1px solid var(--border);vertical-align:top;line-height:1.6;color:var(--text-muted);word-break:break-word}
+.md-render table tr:hover td{background:rgba(255,255,255,.025)}
+.md-render table th:nth-child(1),.md-render table td:nth-child(1){width:7%}
+.md-render table th:nth-child(2),.md-render table td:nth-child(2){width:15%}
+.md-render table th:nth-child(3),.md-render table td:nth-child(3){width:40%}
+.md-render table th:nth-child(4),.md-render table td:nth-child(4){width:38%}
+/* 具体问题列：红色系 */
+.md-render table th:nth-child(3),.md-render table td:nth-child(3){background:var(--red-soft);color:var(--red);border-left:1px solid var(--border)}
+/* 改进建议列：绿色系 */
+.md-render table th:nth-child(4),.md-render table td:nth-child(4){background:var(--green-soft);color:var(--green);border-left:1px solid var(--border)}
+.md-render table th:nth-child(3)::before{content:"⚠ ";font-weight:600}
+.md-render table th:nth-child(4)::before{content:"✓ ";font-weight:600}
+/* 列内加粗/强调保持列语义色（不被金色覆盖） */
+.md-render table td:nth-child(3) strong{color:var(--red);font-weight:700}
+.md-render table td:nth-child(4) strong{color:var(--green);font-weight:700}
 /* ===== 分组筛选 / 范围切换 ===== */
 .chip{border:1px solid var(--surface-2);background:transparent;color:var(--text-muted);border-radius:999px;padding:4px 12px;font-size:12.5px;cursor:pointer;transition:all .15s}
 .chip:hover{color:var(--text);border-color:var(--text-muted)}
