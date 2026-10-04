@@ -531,20 +531,20 @@ function onDrop(e: DragEvent) {
             {{ classifying ? `智能分类 ${classifyProgress}…` : "智能分类" }}
           </button>
           <button class="btn btn-ghost btn-sm" :disabled="classifying || selected.size === 0" @click="classifyScope = 'selected'; startClassify()" title="仅对勾选的文档分类">分类勾选</button>
-          <button class="btn btn-danger btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '删除选中文档'" @click="removeSelected">删除</button>
-          <button class="btn btn-ghost btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '移出分组（回到未分组）'" @click="ungroupSelected">移出分组</button>
-          <button v-if="selected.size > 0" class="btn btn-ghost btn-sm" @click="selected = new Set()">取消</button>
+          <button class="btn btn-danger btn-sm" :disabled="classifying || selected.size === 0" :title="classifying ? '分类进行中，请稍候' : (selected.size === 0 ? '先勾选文档' : '删除选中文档')" @click="removeSelected">删除</button>
+          <button class="btn btn-ghost btn-sm" :disabled="classifying || selected.size === 0" :title="classifying ? '分类进行中，请稍候' : (selected.size === 0 ? '先勾选文档' : '移出分组（回到未分组）')" @click="ungroupSelected">移出分组</button>
+          <button v-if="selected.size > 0" class="btn btn-ghost btn-sm" :disabled="classifying" @click="selected = new Set()">取消</button>
         </div>
       </div>
       <!-- 第二行：常驻移组槽位（固定高度，零布局跳动） -->
       <div class="tbl-bar-tags">
         <template v-if="selected.size > 0">
           <span class="tag-editor-label">移入分组：</span>
-          <select class="select" v-model="batchGroup">
+          <select class="select" v-model="batchGroup" :disabled="classifying">
             <option value="">选择目标分组…</option>
             <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
           </select>
-          <button class="btn btn-primary btn-sm" @click="applyBatchGroup">应用</button>
+          <button class="btn btn-primary btn-sm" :disabled="classifying" @click="applyBatchGroup">应用</button>
         </template>
         <span v-else class="tag-editor-label" style="color:var(--text-faint)">勾选文档后，可在这里批量移入 / 移出分组</span>
       </div>
@@ -581,12 +581,12 @@ function onDrop(e: DragEvent) {
         <table class="tbl">
         <colgroup><col style="width:34px" /><col /><col /><col /><col /><col /><col style="width:150px" /></colgroup>
         <thead><tr>
-          <th><input type="checkbox" :checked="allChecked" @change="toggleAll" /></th>
+          <th><input type="checkbox" :checked="allChecked" :disabled="classifying" @change="toggleAll" /></th>
           <th>文件名</th><th>类型</th><th>大小</th><th>入库时间</th><th>分组</th><th style="text-align:right">操作</th>
         </tr></thead>
         <tbody>
           <tr v-for="d in filtered" :key="d.id" :class="{ sel: selected.has(d.id) }">
-            <td><input type="checkbox" :checked="selected.has(d.id)" @change="toggleOne(d.id)" /></td>
+            <td><input type="checkbox" :checked="selected.has(d.id)" :disabled="classifying" @change="toggleOne(d.id)" /></td>
             <td>
               <div class="fname">
                 <svg viewBox="0 0 24 24" :style="{ stroke: fileColor(d.file_type) }"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg>
@@ -668,7 +668,8 @@ function onDrop(e: DragEvent) {
 </template>
 
 <style scoped>
-.group-nav { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0 12px; }
+.group-nav { display: flex; gap: 6px; align-items: center; margin: 4px 0 12px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.group-nav::-webkit-scrollbar { display: none; }
 .chip {
   border: 1px solid var(--surface-2); background: transparent; color: var(--text-muted);
   border-radius: 999px; padding: 4px 12px; font-size: 12.5px; cursor: pointer;
@@ -681,10 +682,10 @@ function onDrop(e: DragEvent) {
   color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0; text-align: center;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
-/* 删除分组二次确认态：红字红框醒目，变红 pill 显示「确认删？」 */
+/* 删除分组二次确认态：实心红填充 + 白字，最醒目 */
 .g-del.confirm {
   width: auto; min-width: 52px; padding: 0 6px; border-radius: 999px;
-  background: rgba(244, 67, 54, 0.12); color: var(--red); border: 1px solid var(--red);
+  background: var(--danger); color: #fff; border: 1px solid var(--danger);
   line-height: 15px; font-size: 10.5px; top: -7px; right: -26px; white-space: nowrap;
   font-weight: 700;
 }
@@ -736,8 +737,9 @@ tr.sel td { background: rgba(232, 179, 106, 0.06); }
   font-size: 13px; line-height: 1; padding: 0 2px;
 }
 .classify-x:hover { color: var(--red); }
-/* 列表 8 行限高 + 表头冻结（滚动时表头钉在顶部） */
-.scroll-limit { max-height: 402px; }
+/* 列表 6 行限高 + 表头冻结；隐藏滚动条滑块（滚轮仍可滚，页面更简洁） */
+.scroll-limit { max-height: 300px; scrollbar-width: none; }
+.scroll-limit::-webkit-scrollbar { display: none; }
 .scroll-limit thead th {
   position: sticky; top: 0; z-index: 1;
   background: var(--surface-1);
