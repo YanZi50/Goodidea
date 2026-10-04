@@ -39,3 +39,15 @@ export function onUseHotspot(h: HotspotHandler): () => void {
 export function emitUseHotspot(topic: string): void {
   for (const h of [...hotspotHandlers]) h(topic);
 }
+
+// ---- 模型档案切换（顶栏下拉 → 设置页/各面板即时刷新） ----
+const modelHandlers = new Set<Handler>();
+
+export function onModelSwitched(h: Handler): () => void {
+  modelHandlers.add(h);
+  return () => modelHandlers.delete(h);
+}
+
+export function emitModelSwitched(): void {
+  for (const h of [...modelHandlers]) h();
+}

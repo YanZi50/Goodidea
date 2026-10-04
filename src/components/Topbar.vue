@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, inject } from "vue";
 import { todayCost } from "../lib/ai";
 import { listProfiles, setActiveProfile, getActiveProfile, migrateLegacyConfig, isTauriRuntime, type AIProfile } from "../lib/db";
+import { emitModelSwitched } from "../lib/bus";
 
 defineProps<{ title: string; desc: string }>();
 const toast = inject("toast") as (msg: string) => void;
@@ -35,6 +36,7 @@ async function switchModel(p: AIProfile) {
   activeId.value = p.id;
   modelLabel.value = p.label;
   open.value = false;
+  emitModelSwitched(); // 设置页等消费方即时刷新，无需手动刷新
   toast(`已切换模型：${p.label}`);
 }
 
