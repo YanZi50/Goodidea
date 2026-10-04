@@ -248,6 +248,13 @@ table.tbl tr:hover .row-actions{opacity:1}
 .scroll-limit::-webkit-scrollbar-thumb,.scroll-limit-sm::-webkit-scrollbar-thumb,.out-area::-webkit-scrollbar-thumb{background:#2a3340;border-radius:4px}
 .scroll-limit::-webkit-scrollbar-thumb:hover,.scroll-limit-sm::-webkit-scrollbar-thumb:hover,.out-area::-webkit-scrollbar-thumb:hover{background:#3a4656}
 .scroll-limit::-webkit-scrollbar-track,.scroll-limit-sm::-webkit-scrollbar-track,.out-area::-webkit-scrollbar-track{background:transparent}
+/* 分组导航横向滚动条：细滑块提示可横滚（深/浅主题适配） */
+.group-nav::-webkit-scrollbar{height:6px}
+.group-nav::-webkit-scrollbar-thumb{background:#2a3340;border-radius:3px}
+.group-nav::-webkit-scrollbar-thumb:hover{background:#3a4656}
+.group-nav::-webkit-scrollbar-track{background:transparent}
+[data-theme="light"] .group-nav::-webkit-scrollbar-thumb{background:#C6CFDA}
+[data-theme="light"] .group-nav::-webkit-scrollbar-thumb:hover{background:#ADB9C7}
 @media (max-width:760px){.scroll-limit{max-height:340px}.scroll-limit-sm{max-height:260px}}
 /* ===== AI 输出 Markdown 渲染 ===== */
 .md-render{font-size:13.5px;line-height:1.7;color:var(--text)}
