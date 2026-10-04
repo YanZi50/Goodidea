@@ -2,7 +2,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listDocuments, countChunks, listAllChunkContent, listGroups } from "../lib/db";
+import { listDocuments, countChunks, listAllChunkContent, listGroups, recordHistory } from "../lib/db";
 import { onDataChanged, onAnalyzeDocRequest } from "../lib/bus";
 import {
   loadActiveConfig,
@@ -223,6 +223,13 @@ async function runAnalysis() {
       at: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
     };
     if (incrOnly.value) markAnalyzed();
+    await recordHistory({
+      kind: "analysis",
+      title: `智能分析·${scopeLabel.value}${incrOnly.value ? "（仅新增）" : ""}`,
+      prompt: prompt.slice(0, 200),
+      output: res.text,
+      meta: JSON.stringify(lastMeta.value),
+    });
     toast(`分析完成 · ${lastMeta.value.cost}${incrOnly.value ? "（增量基准已更新）" : ""}`);
   } catch (err) {
     toast(`分析失败：${err instanceof Error ? err.message : String(err)}`);
