@@ -1,4 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use serde::Deserialize;
+use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[tauri::command]
@@ -17,6 +19,127 @@ fn save_backup(path: String, content: String) -> Result<(), String> {
 #[tauri::command]
 fn read_backup(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+// ---- 备份还原（Rust 单连接事务，规避 tauri-plugin-sql 连接池下跨语句事务失效 BUG-014） ----
+#[derive(Deserialize)]
+struct BackupDoc {
+    id: i64,
+    filename: String,
+    file_type: String,
+    file_hash: Option<String>,
+    size: Option<i64>,
+    group_id: Option<i64>,
+    created_at: String,
+}
+#[derive(Deserialize)]
+struct BackupChunk {
+    doc_id: i64,
+    seq: i64,
+    content: String,
+    token_count: Option<i64>,
+}
+#[derive(Deserialize)]
+struct BackupGroup {
+    name: String,
+    created_at: String,
+}
+#[derive(Deserialize)]
+struct BackupRule {
+    model: String,
+    input_price: f64,
+    output_price: f64,
+    updated_at: String,
+}
+#[derive(Deserialize)]
+struct BackupPayload {
+    app: String,
+    documents: Vec<BackupDoc>,
+    chunks: Vec<BackupChunk>,
+    groups: Vec<BackupGroup>,
+    billing_rules: Vec<BackupRule>,
+}
+
+/// 还原备份：解析 JSON → 单连接事务重建 documents/chunks/groups/billing_rules（模型档案保留不动）。
+/// 返回导入计数 JSON；任一步失败整体回滚。
+#[tauri::command]
+fn import_backup(app: tauri::AppHandle, json: String) -> Result<String, String> {
+    use rusqlite::{params, Connection};
+    let payload: BackupPayload = serde_json::from_str(&json).map_err(|e| format!("备份文件解析失败：{e}"))?;
+    if payload.app != "goodidea" {
+        return Err("不是有效的 Goodidea 备份文件".into());
+    }
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("无法定位配置目录：{e}"))?;
+    let db_path = dir.join("goodidea.db");
+    let conn = Connection::open(&db_path).map_err(|e| format!("打开数据库失败：{e}"))?;
+    conn.busy_timeout(std::time::Duration::from_secs(10))
+        .map_err(|e| format!("设置 busy_timeout 失败：{e}"))?;
+    conn.execute_batch("PRAGMA foreign_keys = OFF; BEGIN IMMEDIATE;")
+        .map_err(|e| format!("开启事务失败：{e}"))?;
+    let run = (|| -> Result<(), String> {
+        conn.execute("DELETE FROM chunks", []).map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM documents", []).map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM groups", []).map_err(|e| e.to_string())?;
+        {
+            let mut st = conn
+                .prepare("INSERT INTO groups (name, created_at) VALUES (?1, ?2)")
+                .map_err(|e| e.to_string())?;
+            for g in &payload.groups {
+                st.execute(params![g.name, g.created_at]).map_err(|e| e.to_string())?;
+            }
+        }
+        {
+            let mut st = conn
+                .prepare("INSERT INTO documents (id, filename, file_type, file_hash, size, group_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+                .map_err(|e| e.to_string())?;
+            for d in &payload.documents {
+                st.execute(params![d.id, d.filename, d.file_type, d.file_hash, d.size, d.group_id, d.created_at])
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        {
+            let mut st = conn
+                .prepare("INSERT INTO chunks (doc_id, seq, content, token_count) VALUES (?1, ?2, ?3, ?4)")
+                .map_err(|e| e.to_string())?;
+            for c in &payload.chunks {
+                st.execute(params![c.doc_id, c.seq, c.content, c.token_count])
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        {
+            let mut st = conn
+                .prepare(
+                    "INSERT INTO billing_rules (model, input_price, output_price, updated_at) VALUES (?1, ?2, ?3, ?4) \
+                     ON CONFLICT(model) DO UPDATE SET input_price = ?2, output_price = ?3, updated_at = ?4",
+                )
+                .map_err(|e| e.to_string())?;
+            for r in &payload.billing_rules {
+                st.execute(params![r.model, r.input_price, r.output_price, r.updated_at])
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(())
+    })();
+    match run {
+        Ok(()) => {
+            conn.execute_batch("COMMIT;")
+                .map_err(|e| format!("提交事务失败：{e}"))?;
+            let counts = serde_json::json!({
+                "documents": payload.documents.len(),
+                "chunks": payload.chunks.len(),
+                "groups": payload.groups.len(),
+                "rules": payload.billing_rules.len(),
+            });
+            Ok(counts.to_string())
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            Err(format!("还原失败：{e}"))
+        }
+    }
 }
 
 pub fn run() {
@@ -106,7 +229,7 @@ pub fn run() {
                 .add_migrations("sqlite:goodidea.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![greet, save_backup, read_backup])
+        .invoke_handler(tauri::generate_handler![greet, save_backup, read_backup, import_backup])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

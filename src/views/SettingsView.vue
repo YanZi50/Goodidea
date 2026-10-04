@@ -104,7 +104,7 @@ async function restoreBackup() {
     restoring.value = true;
     const r = await importBackupData(data);
     if (!r) {
-      toast("还原失败（数据库不可用）");
+      toast("还原失败（数据库未响应，请重试）");
       return;
     }
     emitDataChanged(); // 文档库等面板即时刷新

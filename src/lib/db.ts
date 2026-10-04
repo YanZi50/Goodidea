@@ -605,51 +605,15 @@ export async function exportBackupData(): Promise<BackupPayload | null> {
   }
 }
 
-/** 还原备份：重建文档/分块/分组（覆盖），价格表覆盖；模型档案保留现有（密钥敏感不覆盖）。返回导入计数 */
+/** 还原备份：交给 Rust 单连接事务重建（文档/分块/分组/价格表，模型档案保留不动），返回导入计数。
+ *  web 环境降级 null。连接池下前端逐条 execute 事务不可靠（BUG-014），故整体下沉 Rust。 */
 export async function importBackupData(backup: BackupPayload): Promise<{ documents: number; chunks: number; groups: number; rules: number } | null> {
   if (!isTauriRuntime()) return null;
-  if (!backup || backup.app !== "goodidea") return null;
   try {
-    const d = await getDb();
-    await d.execute("BEGIN");
-    await d.execute("DELETE FROM chunks");
-    await d.execute("DELETE FROM documents");
-    await d.execute("DELETE FROM groups");
-    for (const g of backup.groups) {
-      await d.execute("INSERT INTO groups (name, created_at) VALUES ($1, $2)", [g.name, g.created_at]);
-    }
-    // 显式 id 插入：AUTOINCREMENT 允许显式指定主键，chunks.doc_id 直接沿用备份 id，
-    // 规避 tauri-plugin-sql 连接池下 last_insert_rowid() 跨连接取错的风险（BUG-014）
-    for (const doc of backup.documents) {
-      await d.execute(
-        "INSERT INTO documents (id, filename, file_type, file_hash, size, group_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-        [doc.id, doc.filename, doc.file_type, doc.file_hash, doc.size, doc.group_id, doc.created_at]
-      );
-    }
-    for (const c of backup.chunks) {
-      await d.execute("INSERT INTO chunks (doc_id, seq, content, token_count) VALUES ($1, $2, $3, $4)", [c.doc_id, c.seq, c.content, c.token_count]);
-    }
-    for (const r of backup.billing_rules) {
-      await d.execute(
-        "INSERT INTO billing_rules (model, input_price, output_price, updated_at) VALUES ($1, $2, $3, $4) " +
-          "ON CONFLICT(model) DO UPDATE SET input_price = $2, output_price = $3, updated_at = $4",
-        [r.model, r.input_price, r.output_price, r.updated_at]
-      );
-    }
-    await d.execute("COMMIT");
-    return {
-      documents: backup.documents.length,
-      chunks: backup.chunks.length,
-      groups: backup.groups.length,
-      rules: backup.billing_rules.length,
-    };
+    const { invoke } = await import("@tauri-apps/api/core");
+    const r = await invoke<string>("import_backup", { json: JSON.stringify(backup) });
+    return JSON.parse(r) as { documents: number; chunks: number; groups: number; rules: number };
   } catch (err) {
-    try {
-      const d = await getDb();
-      await d.execute("ROLLBACK");
-    } catch {
-      /* ignore */
-    }
     console.error("[db] importBackupData failed", err);
     return null;
   }
