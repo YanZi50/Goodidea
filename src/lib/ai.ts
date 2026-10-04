@@ -237,6 +237,24 @@ export function costByModel(): Record<string, number> {
   }
 }
 
+/** 清空全部消耗记录（当日累计 / 按模型 / 近 30 日历史） */
+export function clearCosts(): void {
+  localStorage.removeItem(TODAY_KEY());
+  localStorage.removeItem(BY_MODEL_KEY);
+  localStorage.removeItem(HISTORY_KEY);
+}
+
+/** 删除单个模型的消耗记录（按模型统计条目；当日/历史为混合累计不精确拆分，保留） */
+export function removeModelCost(model: string): void {
+  try {
+    const byModel = JSON.parse(localStorage.getItem(BY_MODEL_KEY) ?? "{}") as Record<string, number>;
+    delete byModel[model];
+    localStorage.setItem(BY_MODEL_KEY, JSON.stringify(byModel));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** 近 n 日逐日消耗（缺日补 0），返回 [{date, v}] */
 export function costHistory(days = 7): Array<{ date: string; v: number }> {
   try {
