@@ -13,7 +13,7 @@ import {
   setDocumentsGroup,
 } from "../lib/db";
 import { ingestFile, ingestText } from "../lib/ingest";
-import { emitDataChanged, emitAnalyzeDocRequest } from "../lib/bus";
+import { emitDataChanged, emitAnalyzeDocRequest, onDataChanged } from "../lib/bus";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -88,22 +88,35 @@ function analyzeDoc(d: DocumentRow) {
   emitAnalyzeDocRequest(d.id);
 }
 
+let refreshing = false; // 防重入：refresh 会 emitDataChanged，避免与 onDataChanged 回调形成循环
+
 async function refresh() {
-  docs.value = await listDocuments();
-  totalChunks.value = (await countChunks()) ?? 0;
-  groups.value = await listGroups();
-  loading.value = false;
-  // 清理失效的选择/筛选
-  const valid = new Set(docs.value.map((d) => d.id));
-  selected.value = new Set([...selected.value].filter((id) => valid.has(id)));
-  if (typeof groupFilter.value === "number" && !groups.value.some((g) => g.id === groupFilter.value)) {
-    groupFilter.value = "all";
+  if (refreshing) return;
+  refreshing = true;
+  try {
+    docs.value = await listDocuments();
+    totalChunks.value = (await countChunks()) ?? 0;
+    groups.value = await listGroups();
+    loading.value = false;
+    // 清理失效的选择/筛选
+    const valid = new Set(docs.value.map((d) => d.id));
+    selected.value = new Set([...selected.value].filter((id) => valid.has(id)));
+    if (typeof groupFilter.value === "number" && !groups.value.some((g) => g.id === groupFilter.value)) {
+      groupFilter.value = "all";
+    }
+    // 广播数据变更：分析页等消费方实时同步（建组/删组/移组/导入/删除后无需手动刷新）
+    emitDataChanged();
+  } finally {
+    refreshing = false;
   }
-  // 广播数据变更：分析页等消费方实时同步（建组/删组/移组/导入/删除后无需手动刷新）
-  emitDataChanged();
 }
 
 onMounted(refresh);
+
+// 其他模块（如设置页还原备份）写入数据后，文档库即时刷新，无需手动刷新
+onMounted(() => {
+  onDataChanged(() => void refresh());
+});
 
 const ungroupedCount = computed(() => docs.value.filter((d) => d.group_id === null).length);
 

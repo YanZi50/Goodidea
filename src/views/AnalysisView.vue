@@ -230,6 +230,7 @@ async function runAnalysis() {
       output: res.text,
       meta: JSON.stringify(lastMeta.value),
     });
+    if (historyOpen.value) await loadHistory(); // 历史面板开着时实时跟进
     toast(`分析完成 · ${lastMeta.value.cost}${incrOnly.value ? "（增量基准已更新）" : ""}`);
   } catch (err) {
     toast(`分析失败：${err instanceof Error ? err.message : String(err)}`);

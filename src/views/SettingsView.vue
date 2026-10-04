@@ -108,6 +108,7 @@ async function restoreBackup() {
       return;
     }
     emitDataChanged(); // 文档库等面板即时刷新
+    status.value = await dbStatus(); // 本页文档数即时更新，无需手动刷新
     toast(`已还原：${r.documents} 篇文档 / ${r.chunks} 块 / ${r.groups} 个分组 / ${r.rules} 条价格`);
   } catch (err) {
     toast(`还原失败：${err instanceof Error ? err.message : String(err)}`);

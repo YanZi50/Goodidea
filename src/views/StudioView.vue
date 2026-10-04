@@ -221,6 +221,7 @@ async function generate() {
       output: output.value,
       meta: JSON.stringify(meta.value),
     });
+    await loadHistory(); // 历史面板开着时实时跟进最新一条
     toast(`生成完成 · ${meta.value.cost}`);
   } catch (err) {
     toast(`生成失败：${err instanceof Error ? err.message : String(err)}`);
