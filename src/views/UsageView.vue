@@ -21,7 +21,10 @@ function refresh() {
       const p = priceFor(label);
       return {
         label,
-        price: `¥${p.in} / 1M in · ¥${p.out} / 1M out`,
+        price:
+          p.in === 0 && p.out === 0
+            ? "未收录单价（可在设置→价格表添加）"
+            : `¥${p.in} / 1M in · ¥${p.out} / 1M out`,
         amt,
       };
     });

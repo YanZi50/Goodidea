@@ -214,8 +214,8 @@ async function runAnalysis() {
   try {
     const res = await runGeneration(cfg, system, prompt);
     result.value = res.text;
-    const cost = calcCost(cfg.label, res.usage);
-    addCost(cfg.label, cost.amount);
+    const cost = calcCost(cfg.model, res.usage);
+    addCost(cfg.model, cost.amount);
     today.value = todayCost();
     lastMeta.value = {
       tokens: `${cost.inputTokens.toLocaleString()} in / ${cost.outputTokens.toLocaleString()} out`,

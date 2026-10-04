@@ -265,8 +265,8 @@ async function generate() {
       for await (const chunk of textStream) {
         text += chunk;
       }
-      const cost = calcCost(cfg.label, await usage);
-      addCost(cfg.label, cost.amount);
+      const cost = calcCost(cfg.model, await usage);
+      addCost(cfg.model, cost.amount);
       return {
         text,
         meta: {

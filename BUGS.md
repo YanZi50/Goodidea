@@ -183,6 +183,18 @@
 - **解决**：AI 请求在 Tauri 运行时统一改走 Rust 网络栈——`providerFor()` 给 createOpenAI 注入 `fetch: isTauriRuntime() ? tauriFetch : undefined`（@tauri-apps/plugin-http，reqwest 实现，无 CORS 概念）；capabilities http:default allow 放宽为 `https://**` + `http://**`（产品定位"任意 OpenAI 兼容端点"，含局域网自建端点），deny 留空。web 预览无插件仍走原生 fetch（浏览器 CORS 无法绕过，失败时提示改用桌面应用）。
 - **预防**：应用内任何外部 HTTP 一律走 plugin-http Rust 通道（与热点模块一致）；接新端点若 Failed to fetch，先区分 CORS（无 ACAO 头）与账号问题（403 billing_error）——见 probe_aigd.py/probe_cors.py 留存脚本。代码注释已标注（ai.ts providerFor）。
 
+---
+
+## BUG-016：消耗统计恒为 0——计费按档案 label 匹配价格表，与模型名永远不命中
+
+- **日期**：2026-10-04
+- **关联 commit**：@待回填
+- **所属模块**：消耗统计（src/lib/ai.ts priceFor + StudioView/AnalysisView/UsageView 调用点）
+- **症状**：真实调用模型后 DeepSeek 官网有消耗，应用内「今日消耗 ¥0.00」、消耗统计页按模型无金额；反复生成也不累计。
+- **根因**：`calcCost(modelLabel, usage)` 的 `priceFor` 用 `modelLabel.includes(priceKey)` 匹配价格表（PRICE_TABLE / billing_rules，key 为**模型名**如 deepseek-v4-flash）；而三个调用点传入的是**档案 label**（如 "Deepseek"）——档案名与价格表 key 无包含关系，永不命中 → 返回 `{in:0,out:0}` → amount 恒 0，`addCost` 累加 0。多档案体系引入 label 后调用点未同步改传模型名。
+- **解决**：调用点统一改传 `cfg.model`（模型名）→ `calcCost(cfg.model, usage)` / `addCost(cfg.model, amount)`；统计 key 与价格表 key 一致（模型名）；UsageView 对未收录模型显示「未收录单价（可在设置→价格表添加）」替代误导性的 ¥0/1M。
+- **预防**：价格匹配、统计 key、价格表 key 三者必须同构（统一模型名）；改动档案体系字段后全局搜索其调用点核对参数语义，不只查类型（label/model 均为 string，类型检查查不出）。代码注释已标注（ai.ts priceFor/calcCost）。
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。
