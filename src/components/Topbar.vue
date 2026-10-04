@@ -60,7 +60,7 @@ onUnmounted(() => {
     <div class="topbar-right">
       <div class="model-switch" :class="{ on: open }" @click.stop="open = !open" @blur="open = false" tabindex="0">
         <div class="model-current">
-          <span class="status-dot" :style="{ background: activeId !== null ? 'var(--green)' : 'var(--red)' }"></span>
+          <span class="status-dot" title="绿色=已配置档案（未验证连通）；设置页可点「测试」验证" :style="{ background: activeId !== null ? 'var(--green)' : 'var(--red)' }"></span>
           <span class="model-label" :title="modelLabel">{{ modelLabel }}</span>
           <svg class="chev" viewBox="0 0 24 24" :style="{ transform: open ? 'rotate(180deg)' : '' }"><path d="M6 9l6 6 6-6" /></svg>
         </div>

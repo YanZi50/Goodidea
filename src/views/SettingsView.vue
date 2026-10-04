@@ -18,7 +18,7 @@ import {
   type BackupPayload,
 } from "../lib/db";
 import { emitDataChanged, onModelSwitched } from "../lib/bus";
-import { PRICE_TABLE, reloadPriceTable } from "../lib/ai";
+import { PRICE_TABLE, reloadPriceTable, testConnection } from "../lib/ai";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -51,6 +51,30 @@ const profiles = ref<AIProfile[]>([]);
 const loading = ref(false);
 const editId = ref<number | "new" | null>(null); // 正在编辑的档案 id（"new"=新增草稿）
 const confirmDel = ref<number | null>(null); // 待确认删除的 id（二次确认）
+const testingId = ref<number | null>(null); // 正在测试连接的档案 id
+
+/** 测试档案连通性：真实发一条最小请求，绿色不代表已联通 */
+async function testProfile(p: AIProfile) {
+  testingId.value = p.id;
+  try {
+    const r = await testConnection({
+      label: p.label,
+      baseURL: p.base_url,
+      model: p.model,
+      apiKey: p.api_key,
+      thinking: p.thinking === 1,
+    });
+    if (r.ok) {
+      toast(`连接成功 · ${r.latencyMs}ms（${p.model}）`);
+    } else {
+      toast(`连接失败：${r.detail.slice(0, 120)}`);
+    }
+  } catch (err) {
+    toast(`测试异常：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    testingId.value = null;
+  }
+}
 
 interface EditForm {
   label: string;
@@ -238,7 +262,7 @@ async function priceSave() {
       <div class="card-title">模型接入 <span class="hint">多档案 · 一键切换</span></div>
       <div style="color:var(--text-muted);font-size:13.5px">
         可接入多份模型档案（豆包 / DeepSeek / 任意 OpenAI 兼容端点），顶部下拉一键切换当前模型。
-        密钥仅存本机 SQLite，不入库、不进 git。
+        密钥仅存本机 SQLite，不入库、不进 git。每份档案可点「测试」验证真实连通。
         <span v-if="profiles.some((p) => p.is_active === 1)" style="color:var(--green)">　当前已配置 ✓</span>
         <span v-else style="color:var(--red)">　未配置</span>
       </div>
@@ -295,6 +319,7 @@ async function priceSave() {
               </div>
               <div class="profile-ops">
                 <button v-if="p.is_active !== 1" class="btn btn-soft btn-sm" @click="makeActive(p)">设为当前</button>
+                <button class="btn btn-ghost btn-sm" :disabled="testingId === p.id" @click="testProfile(p)">{{ testingId === p.id ? "测试中…" : "测试" }}</button>
                 <button class="btn btn-ghost btn-sm" @click="startEdit(p)">编辑</button>
                 <button class="btn btn-ghost btn-sm danger" @click="removeProfile(p)">
                   {{ confirmDel === p.id ? "确认删除？" : "删除" }}
