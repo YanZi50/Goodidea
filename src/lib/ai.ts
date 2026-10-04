@@ -113,6 +113,24 @@ export async function streamGeneration(cfg: AIConfig, system: string, prompt: st
   return streamText({ model, system, prompt, providerOptions: { openai: thinkingOptions(cfg) } });
 }
 
+/** 测试模型连通性：发一条最小请求（≤5 token），返回真实结果与延迟。
+ *  用于设置页「测试」按钮——绿色只代表已配置，联通与否以此为准。 */
+export async function testConnection(cfg: AIConfig): Promise<{ ok: boolean; latencyMs: number; detail: string }> {
+  const t0 = Date.now();
+  try {
+    const model = createOpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseURL }).chat(cfg.model);
+    const res = await generateText({
+      model,
+      prompt: "ping",
+      maxOutputTokens: 5,
+      providerOptions: { openai: thinkingOptions(cfg) },
+    });
+    return { ok: true, latencyMs: Date.now() - t0, detail: (res.text || "").slice(0, 30) || "（无返回文本）" };
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - t0, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // ---------- 计费（默认常量价格表；设置页可维护，db 优先覆盖） ----------
 
 export const PRICE_TABLE: Record<string, { in: number; out: number }> = {
