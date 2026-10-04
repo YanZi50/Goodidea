@@ -128,7 +128,7 @@ onMounted(() => load());
           {{ onlyRelated ? "当前榜单暂无行业相关条目 — 试试其他榜单或取消筛选" : "暂无数据" }}
         </div>
       </div>
-      <div style="color:var(--text-faint);font-size:12px;margin-top:6px">数据来源：vvhan 热榜聚合 · 点击条目在浏览器打开原文 · 实时刷新</div>
+      <div style="color:var(--text-faint);font-size:12px;margin-top:6px">数据来源：60s 热榜聚合（主源，备：vvhan）· 点击条目在浏览器打开原文 · 实时刷新</div>
     </template>
 
     <div class="manual-input">
