@@ -149,6 +149,18 @@
 
 ---
 
+## BUG-013：热榜主源 vvhan 在本机网络 DNS 不可达（热点页一直报错）
+
+- **日期**：2026-10-04
+- **关联 commit**：@e633613
+- **所属模块**：实时热点（src/lib/hotlist.ts + capabilities 白名单）
+- **症状**：热点页无论 Tauri 真机还是浏览器预览均报「热榜接口暂不可用（Failed to fetch）」；代码链路完整（Tauri HTTP 插件 + 白名单 + 解析）却拿不到数据。
+- **根因**：**本机网络 DNS 无法解析 `api.vvhan.com`**（实测 `getaddrinfo failed`；同批 api.pearktrue.cn / api-hot.imsyy.top / dailyhotapi.com 同样 DNS 失败，api.oioweb.cn 证书自签名被拒）——是数据源域名不可达，不是接入代码问题。唯一实测可达的热榜源为 **60s.viki.moe**（开源 60s-api，HTTP 200、带 CORS、douyin/weibo/zhihu/toutiao 四平台）。
+- **解决**：主源切换为 `https://60s.viki.moe/v2/{douyin|weibo|zhihu|toutiao}`（解析 `hot_value / hot_value_desc` 归一热度、`link` 作原文链接；百度平台 60s 无端点 → 头条热榜替代）；vvhan 降为兜底（DNS 恢复时自动可用）；capabilities 白名单补 `https://60s.viki.moe/*`。
+- **预防**：接入任何外部 API 前先在本机实测 DNS + HTTP（tpl/probe_hotapi.py 已留存）；多源热榜保留 fallback 链（主源失败自动切备源），不要把单一不可达域名当主源写死。
+
+---
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。
