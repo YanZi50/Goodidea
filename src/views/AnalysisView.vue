@@ -2,7 +2,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listDocuments, countChunks, listAllChunkContent, listGroups, recordHistory } from "../lib/db";
+import { listDocuments, countChunks, listAllChunkContent, listGroups, recordHistory, listHistories, deleteHistory, isTauriRuntime, type HistoryRow } from "../lib/db";
 import { onDataChanged, onAnalyzeDocRequest } from "../lib/bus";
 import {
   loadActiveConfig,
@@ -256,6 +256,34 @@ function clearDocScope() {
   docScope.value = null;
   void refreshScopeStats();
 }
+
+// ---- 分析历史（histories v5）：回看 + 一键回填 ----
+const historyOpen = ref(false);
+const histories = ref<HistoryRow[]>([]);
+
+async function loadHistory() {
+  if (isTauriRuntime()) histories.value = (await listHistories(10, "analysis")) ?? [];
+}
+function toggleHistory() {
+  historyOpen.value = !historyOpen.value;
+  if (historyOpen.value) void loadHistory();
+}
+function reuseHistory(h: HistoryRow) {
+  result.value = h.output; // renderedResult 为 computed，自动重渲染
+  lastMeta.value = {
+    tokens: "",
+    cost: "",
+    at: new Date(h.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+  };
+  toast(`已回填历史「${h.title}」`);
+}
+async function delHistory(h: HistoryRow) {
+  await deleteHistory(h.id);
+  await loadHistory();
+}
+function histTime(iso: string): string {
+  return new Date(iso).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
 </script>
 
 <template>
@@ -291,7 +319,46 @@ function clearDocScope() {
           <svg viewBox="0 0 24 24"><path d="M3 3v18h18" /><path d="M7 15l4-6 3 4 5-7" /></svg>{{ analyzing ? "分析中…" : (docScope !== null ? "分析这篇" : scope !== 'all' ? "开始分析该范围" : "重新分析全部") }}
         </button>
         <button class="btn btn-ghost" :disabled="analyzing || docScope !== null" title="只分析上次分析后新入库的文档" @click="runIncremental">仅分析新增</button>
+        <button class="btn btn-ghost" @click="toggleHistory">{{ historyOpen ? "收起历史" : "历史记录" }}</button>
+      </div>
+      <div v-if="historyOpen" class="hist-panel">
+        <div v-if="histories.length === 0" style="font-size:13px;color:var(--text-faint);padding:8px 0">暂无分析历史 — 完成一次分析后自动记录</div>
+        <div v-for="h in histories" :key="h.id" class="hist-item" @click="reuseHistory(h)">
+          <div class="hi-main">
+            <div class="hi-title">{{ h.title }}</div>
+            <div class="hi-sub">{{ histTime(h.created_at) }} · 结果 {{ (h.output || "").length }} 字</div>
+          </div>
+          <button class="icon-btn hi-del" title="删除这条历史" @click.stop="delHistory(h)">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></svg>
+          </button>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:6px">点击条目回填分析结果（可复制后另用）</div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.hist-panel {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 8px 10px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.hist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.hist-item:hover { background: var(--surface-2); }
+.hi-main { flex: 1; min-width: 0; }
+.hi-title { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hi-sub { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+.hi-del { flex-shrink: 0; }
+</style>
