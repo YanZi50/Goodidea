@@ -173,6 +173,16 @@
 
 ---
 
+## BUG-015：AI 请求被 WebView2 CORS 拦截——中转类兼容端点（无 ACAO 头）一律 Failed to fetch
+
+- **日期**：2026-10-04
+- **关联 commit**：@待回填
+- **所属模块**：AI 请求通道（src/lib/ai.ts providerFor + src-tauri/capabilities/default.json）
+- **症状**：设置页「测试」与生成/分析均报 `Failed to fetch`，但 DeepSeek 官方档案正常；用同一 key 在本机 python 直连该端点（aigd.top，OpenAI 兼容中转）HTTP 200 正常返回，应用内却必失败。
+- **根因**：AI 请求此前走 WebView2 **原生 fetch**，受浏览器 CORS 模型约束——跨域请求要求响应携带 `Access-Control-Allow-Origin`。DeepSeek/火山官方端点带 ACAO 放行；aigd.top 这类中转站响应**无 ACAO 头** → WebView 拦截 → 报 Failed to fetch（网络层错误，掩盖了真实 HTTP 状态）。capabilities 的 http:default 白名单此前只放行热点域名，且前端热点模块已走 Rust 通道（hotlist.ts 用 plugin-http fetch），AI 通道未接入，两端行为不一致。
+- **解决**：AI 请求在 Tauri 运行时统一改走 Rust 网络栈——`providerFor()` 给 createOpenAI 注入 `fetch: isTauriRuntime() ? tauriFetch : undefined`（@tauri-apps/plugin-http，reqwest 实现，无 CORS 概念）；capabilities http:default allow 放宽为 `https://**` + `http://**`（产品定位"任意 OpenAI 兼容端点"，含局域网自建端点），deny 留空。web 预览无插件仍走原生 fetch（浏览器 CORS 无法绕过，失败时提示改用桌面应用）。
+- **预防**：应用内任何外部 HTTP 一律走 plugin-http Rust 通道（与热点模块一致）；接新端点若 Failed to fetch，先区分 CORS（无 ACAO 头）与账号问题（403 billing_error）——见 probe_aigd.py/probe_cors.py 留存脚本。代码注释已标注（ai.ts providerFor）。
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。

@@ -3,6 +3,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, streamText } from "ai";
 import { listBillingRules, isTauriRuntime, getActiveProfile, updateProfile, createProfile } from "./db";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 export interface AIConfig {
   label: string; // 显示名（消耗统计按此归组）
@@ -78,6 +79,10 @@ function providerFor(cfg: AIConfig) {
   return createOpenAI({
     apiKey: cfg.apiKey,
     baseURL: cfg.baseURL,
+    // Tauri 运行时走 Rust 网络栈（tauri-plugin-http），绕开 WebView2 的浏览器 CORS 拦截——
+    // 中转类兼容端点（如 aigd.top 等）常不带 Access-Control-Allow-Origin 头，原生 fetch 会报 Failed to fetch；
+    // 热点模块同通道（BUG-015）。web 预览无插件，仍走原生 fetch（受 CORS 限制）。
+    fetch: isTauriRuntime() ? tauriFetch : undefined,
   }).chat(cfg.model);
 }
 
