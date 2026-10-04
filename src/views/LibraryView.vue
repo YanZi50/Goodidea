@@ -560,7 +560,7 @@ function onDrop(e: DragEvent) {
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <input class="input" style="width:180px" v-model="classifyEdits[name]" @blur="commitCategory(name)" @keydown.enter="commitCategory(name)" :title="'组名可编辑，回车/失焦后同组文档自动合并'" />
               <span class="tag blue" style="font-size:11px">{{ groupOfCategory(name).length }} 篇</span>
-              <button class="btn btn-ghost btn-sm" @click="removeCategory(name)">整组移除</button>
+              <button class="btn btn-ghost btn-sm danger" @click="removeCategory(name)">整组移除</button>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
               <span v-for="it in groupOfCategory(name)" :key="it.docId" class="classify-doc">
@@ -576,7 +576,8 @@ function onDrop(e: DragEvent) {
           <button class="btn btn-ghost btn-sm" @click="classifyOpen = false">取消</button>
         </div>
       </div>
-      <div class="scroll-limit">
+      <!-- 智能分类确认中：隐藏下方文档列表，页面保持简洁（分类完自动恢复） -->
+      <div v-if="!classifyOpen" class="scroll-limit">
         <table class="tbl">
         <colgroup><col style="width:34px" /><col /><col /><col /><col /><col /><col style="width:150px" /></colgroup>
         <thead><tr>
@@ -680,12 +681,14 @@ function onDrop(e: DragEvent) {
   color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0; text-align: center;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
-/* 删除分组二次确认态：变红 pill 显示「确认删？」 */
+/* 删除分组二次确认态：红字红框醒目，变红 pill 显示「确认删？」 */
 .g-del.confirm {
   width: auto; min-width: 52px; padding: 0 6px; border-radius: 999px;
-  background: var(--danger); color: #fff; border-color: var(--danger);
+  background: rgba(244, 67, 54, 0.12); color: var(--red); border: 1px solid var(--red);
   line-height: 15px; font-size: 10.5px; top: -7px; right: -26px; white-space: nowrap;
+  font-weight: 700;
 }
+.g-del.confirm:hover { background: var(--danger); color: #fff; }
 .g-new-input { width: 140px; padding: 5px 10px; }
 .paste-panel {
   border: 1px solid rgba(232, 179, 106, 0.3); border-radius: 10px;
