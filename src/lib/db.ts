@@ -25,6 +25,50 @@ export interface GroupRow {
 const DB_PATH = "sqlite:goodidea.db";
 let db: Database | null = null;
 
+// ---- 通用设置（app_settings，v6）：行业背景等全局配置；web 预览降级 localStorage ----
+const SETTING_PREFIX = "goodidea.appsetting.v1.";
+
+/** 默认行业背景：未配置时的兜底文案（生成/分析注入模型角色） */
+export const DEFAULT_INDUSTRY_CONTEXT =
+  "我从事奢侈品回收行业（名表、包袋等全品类），主打高价回收、先打款后收货；目标用户是希望把闲置名表、包袋快速变现的人。";
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  if (!isTauriRuntime()) return localStorage.getItem(SETTING_PREFIX + key);
+  try {
+    const d = await getDb();
+    const rows = await d.select<{ value: string }[]>(
+      "SELECT value FROM app_settings WHERE key = $1",
+      [key]
+    );
+    return rows[0]?.value ?? null;
+  } catch (err) {
+    console.error("[db] getAppSetting failed", err);
+    return null;
+  }
+}
+
+export async function setAppSetting(key: string, value: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    localStorage.setItem(SETTING_PREFIX + key, value);
+    return;
+  }
+  try {
+    const d = await getDb();
+    await d.execute(
+      "INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, $3) ON CONFLICT(key) DO UPDATE SET value = $2, updated_at = $3",
+      [key, value, new Date().toISOString()]
+    );
+  } catch (err) {
+    console.error("[db] setAppSetting failed", err);
+  }
+}
+
+/** 读取行业背景：未配置或空 → 内置默认文案 */
+export async function loadIndustryContext(): Promise<string> {
+  const v = await getAppSetting("industry_context");
+  return v && v.trim() ? v : DEFAULT_INDUSTRY_CONTEXT;
+}
+
 export function isTauriRuntime(): boolean {
   return (
     typeof window !== "undefined" &&

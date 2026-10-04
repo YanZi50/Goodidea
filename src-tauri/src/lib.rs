@@ -218,6 +218,16 @@ pub fn run() {
               );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "create_app_settings",
+            sql: "CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+              );",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

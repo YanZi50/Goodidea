@@ -9,7 +9,7 @@ import {
   addCost,
 } from "../lib/ai";
 import { onUseHotspot } from "../lib/bus";
-import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, type HistoryRow } from "../lib/db";
+import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, type HistoryRow } from "../lib/db";
 import { checkDuplicates, type DupHit } from "../lib/similarity";
 import { validateOutput, type ValCheck } from "../lib/validate";
 
@@ -244,8 +244,10 @@ async function generate() {
   activeVer.value = 0;
   checkReport.value = null;
 
+  const industry = await loadIndustryContext(); // 行业背景：设置页可配置（v6）
   const system = [
-    "你是资深短视频编导与文案专家，服务于奢侈品回收行业（名表/包袋）。",
+    "你是资深短视频编导与文案专家，擅长把行业知识转化为高转化脚本。",
+    `行业背景（以此为准，不得脱离）：${industry}`,
     `启用 Skill：${[...activeSkills.value].join("、") || "无"}`,
     `可选关联素材：${[...activeMats.value].join("、") || "无"}`,
     `可选热点参考：${activeHot.value}`,

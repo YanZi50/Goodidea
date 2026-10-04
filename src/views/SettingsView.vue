@@ -14,6 +14,8 @@ import {
   migrateLegacyConfig,
   importBackupData,
   isTauriRuntime,
+  loadIndustryContext,
+  setAppSetting,
   type AIProfile,
   type BackupPayload,
 } from "../lib/db";
@@ -21,6 +23,28 @@ import { emitDataChanged, onModelSwitched } from "../lib/bus";
 import { PRICE_TABLE, reloadPriceTable, testConnection } from "../lib/ai";
 
 const toast = inject("toast") as (msg: string) => void;
+
+// ---- 生成偏好（行业背景，v6 app_settings） ----
+const industry = ref("");
+const industryLoaded = ref(false);
+const industrySaved = ref(false);
+
+async function loadIndustry() {
+  industry.value = await loadIndustryContext();
+  industryLoaded.value = true;
+}
+/** 恢复默认：清空自定义，回退内置文案 */
+async function resetIndustry() {
+  industry.value = "";
+  await setAppSetting("industry_context", "");
+  toast("已恢复默认行业背景");
+}
+async function saveIndustry() {
+  await setAppSetting("industry_context", industry.value.trim());
+  industrySaved.value = true;
+  setTimeout(() => (industrySaved.value = false), 2000);
+  toast("行业背景已保存，下次生成/分析生效");
+}
 
 // ---- 数据存储状态 ----
 const status = ref<{ connected: boolean; tables: string[]; documents: number; error?: string }>({
@@ -35,6 +59,7 @@ onMounted(async () => {
   checking.value = false;
   await migrateLegacyConfig(); // 旧单配置首次升级为档案
   await loadProfiles();
+  await loadIndustry();
   offModelSwitched = onModelSwitched(() => {
     // 顶栏切换模型后即时刷新，无需手动刷新
     void loadProfiles();
@@ -371,6 +396,23 @@ async function priceSave() {
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-primary btn-sm" @click="startNew">+ 新增模型</button>
         <span style="font-size:12px;color:var(--text-faint);align-self:center">顶部下拉可直接切换当前模型，消耗统计按档案自动分组</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">生成偏好 <span class="hint">行业背景 · 全链路生效</span></div>
+      <div style="color:var(--text-muted);font-size:13.5px">
+        智能分析与生成工作台以「行业背景」作为模型的角色设定。换行业/品类只改这里，无需改代码——
+        例如做 3C 数码、家居好物等其它类目的脚本，替换下面描述即可。
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label class="label">行业/服务背景（生成与分析的默认角色）</label>
+        <textarea class="textarea" v-model="industry" rows="4" placeholder="例：我从事奢侈品回收行业（名表、包袋等全品类），主打高价回收、先打款后收货……"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-primary btn-sm" @click="saveIndustry">{{ industrySaved ? "已保存 ✓" : "保存行业背景" }}</button>
+        <button class="btn btn-ghost btn-sm" @click="resetIndustry">恢复默认</button>
+        <span style="font-size:12px;color:var(--text-faint);align-self:center" v-if="industryLoaded && !industry">当前为内置默认文案</span>
       </div>
     </div>
 

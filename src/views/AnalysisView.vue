@@ -2,7 +2,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listDocuments, countChunks, listAllChunkContent, listGroups, recordHistory, listHistories, deleteHistory, isTauriRuntime, type HistoryRow } from "../lib/db";
+import { listDocuments, countChunks, listAllChunkContent, listGroups, recordHistory, listHistories, deleteHistory, isTauriRuntime, loadIndustryContext, type HistoryRow } from "../lib/db";
 import { onDataChanged, onAnalyzeDocRequest } from "../lib/bus";
 import {
   loadActiveConfig,
@@ -203,8 +203,10 @@ async function runAnalysis() {
   analyzing.value = true;
   result.value = "";
 
+  const industry = await loadIndustryContext(); // 行业背景：设置页可配置（v6）
   const system = [
-    "你是知识库分析师。对给定文档内容做两件事：",
+    `你是知识库分析师，服务于以下行业背景（以此为准）：${industry}`,
+    "对给定文档内容做两件事：",
     "1) 核心要点：3-5 条，覆盖主题、关键信息、数据口径；",
     "2) 指出问题：内部矛盾、信息缺口、低质/冗余段落、改进建议，逐条列出并标注优先级。",
     "使用 Markdown 结构输出：## 核心要点 / ## 指出问题。",
