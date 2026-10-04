@@ -509,7 +509,7 @@ function onDrop(e: DragEvent) {
       <button class="chip" :class="{ on: groupFilter === 'none' }" @click="groupFilter = 'none'">未分组 {{ ungroupedCount }}</button>
       <span v-for="g in groups" :key="g.id" class="g-chip-wrap">
         <button class="chip g-chip" :class="{ on: groupFilter === g.id }" @click="groupFilter = g.id">{{ g.name }} {{ g.doc_count }}</button>
-        <button class="g-del" :class="{ confirm: groupDelId === g.id }" :title="groupDelId === g.id ? '再次点击确认删除（组内文档移回未分组）' : '删除分组（组内文档移回未分组）'" @click.stop="removeGroup(g)">{{ groupDelId === g.id ? "确认删？" : "×" }}</button>
+        <button class="g-del" :class="{ confirm: groupDelId === g.id }" :title="groupDelId === g.id ? '再次点击确认删除（组内文档移回未分组）' : '删除分组（组内文档移回未分组）'" @click.stop="removeGroup(g)">{{ groupDelId === g.id ? "确认删除？" : "×" }}</button>
       </span>
       <template v-if="creatingGroup">
         <input class="input g-new-input" v-model="newGroupName" placeholder="分组名称…" @keydown.enter="createGroupSubmit" />
@@ -668,8 +668,10 @@ function onDrop(e: DragEvent) {
 </template>
 
 <style scoped>
-.group-nav { display: flex; gap: 6px; align-items: center; margin: 4px 0 12px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.group-nav { display: flex; gap: 6px; align-items: center; margin: 4px 0 12px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
 .group-nav::-webkit-scrollbar { display: none; }
+/* 分组多时横向滚动：子项禁止压缩，名称完整显示不换行 */
+.group-nav .chip, .group-nav .g-chip-wrap, .group-nav .btn { flex-shrink: 0; white-space: nowrap; }
 .chip {
   border: 1px solid var(--surface-2); background: transparent; color: var(--text-muted);
   border-radius: 999px; padding: 4px 12px; font-size: 12.5px; cursor: pointer;
@@ -682,14 +684,14 @@ function onDrop(e: DragEvent) {
   color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0; text-align: center;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
-/* 删除分组二次确认态：实心红填充 + 白字，最醒目 */
+/* 删除分组二次确认态：内联红字（不绝对定位，避免被横向滚动容器裁切、字显示不全） */
 .g-del.confirm {
-  width: auto; min-width: 52px; padding: 0 6px; border-radius: 999px;
-  background: var(--danger); color: #fff; border: 1px solid var(--danger);
-  line-height: 15px; font-size: 10.5px; top: -7px; right: -26px; white-space: nowrap;
-  font-weight: 700;
+  position: static; right: auto; top: auto; width: auto; min-width: 0;
+  background: transparent; border: none; color: var(--red);
+  font-size: 12px; font-weight: 700; padding: 0 2px; line-height: 1;
+  border-radius: 0; margin-left: 4px;
 }
-.g-del.confirm:hover { background: var(--danger); color: #fff; }
+.g-del.confirm:hover { background: transparent; color: var(--red); text-decoration: underline; }
 .g-new-input { width: 140px; padding: 5px 10px; }
 .paste-panel {
   border: 1px solid rgba(232, 179, 106, 0.3); border-radius: 10px;
@@ -742,8 +744,9 @@ tr.sel td { background: rgba(232, 179, 106, 0.06); }
 .scroll-limit::-webkit-scrollbar { display: none; }
 .scroll-limit thead th {
   position: sticky; top: 0; z-index: 1;
-  background: var(--surface-1);
-  box-shadow: 0 1px 0 var(--border);
+  background: var(--surface-2); /* 表头底色填充，与数据行区分 */
+  padding: 9px 12px 13px;
+  border-bottom: 2px solid var(--border-strong);
 }
 /* 智能分类确认面板限高滚动：不撑爆页面，滚动查看 */
 .classify-panel { max-height: 360px; overflow-y: auto; }
