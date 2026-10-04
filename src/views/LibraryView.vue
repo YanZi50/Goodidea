@@ -3,6 +3,7 @@ import { ref, computed, inject, onMounted } from "vue";
 import type { DocumentRow, GroupRow } from "../lib/db";
 import {
   listDocuments,
+  listUngroupedDocuments,
   countChunks,
   deleteDocument,
   deleteDocuments,
@@ -11,9 +12,11 @@ import {
   deleteGroup,
   setDocumentGroup,
   setDocumentsGroup,
+  listAllChunkContent,
 } from "../lib/db";
 import { ingestFile, ingestText } from "../lib/ingest";
 import { emitDataChanged, emitAnalyzeDocRequest, onDataChanged } from "../lib/bus";
+import { loadActiveConfig, runGeneration } from "../lib/ai";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -247,6 +250,145 @@ async function applyBatchGroup() {
   }
 }
 
+// ---- 智能分类：AI 打标签 → 确认面板 → 建组/移组落库 ----
+interface ClassifyItem {
+  docId: number;
+  filename: string;
+  category: string;
+  reason: string;
+}
+const classifyOpen = ref(false);
+const classifying = ref(false);
+const classifyProgress = ref("");
+const classifyScope = ref<"all" | "selected">("all");
+const classifyItems = ref<ClassifyItem[]>([]);
+const classifyError = ref("");
+/** 组名编辑缓冲：category(旧名) → 编辑中的新名；失焦/回车时提交并重建 */
+const classifyEdits = ref<Record<string, string>>({});
+
+function groupOfCategory(name: string): ClassifyItem[] {
+  return classifyItems.value.filter((i) => i.category.trim() === name.trim());
+}
+function classifyCategoryNames(): string[] {
+  const names = classifyItems.value.map((i) => i.category.trim()).filter(Boolean);
+  return [...new Set(names)];
+}
+/** 提交组名编辑：空名兜底「未命名分组」，同组文档自动跟随 */
+function commitCategory(oldName: string) {
+  let v = (classifyEdits.value[oldName] ?? "").trim().slice(0, 12);
+  if (!v) v = "未命名分组";
+  classifyItems.value.forEach((it) => {
+    if (it.category.trim() === oldName.trim()) it.category = v;
+  });
+  classifyEdits.value = {};
+  for (const it of classifyItems.value) classifyEdits.value[it.category] = it.category;
+}
+function removeCategory(name: string) {
+  classifyItems.value = classifyItems.value.filter((i) => i.category.trim() !== name.trim());
+}
+function removeItem(docId: number) {
+  classifyItems.value = classifyItems.value.filter((i) => i.docId !== docId);
+}
+/** 清洗模型返回的类别名：取首行、去引号/列表符号，限长 */
+function parseCategory(raw: string): string {
+  let s = (raw || "").trim().split("\n")[0].trim();
+  s = s.replace(/^[\s#*\-·>"\u201c\u201d'、]+/, "").replace(/["'\u201c\u201d。.!！?？]+$/g, "").trim();
+  return s.slice(0, 12);
+}
+
+async function startClassify() {
+  if (classifying.value) return;
+  classifyError.value = "";
+  const cfg = await loadActiveConfig();
+  if (!cfg) {
+    toast("请先在设置中配置并启用模型档案");
+    return;
+  }
+  let targets: { id: number; filename: string }[];
+  if (classifyScope.value === "selected") {
+    targets = [...selected.value].map((id) => ({ id, filename: docs.value.find((d) => d.id === id)?.filename ?? `文档${id}` }));
+    if (targets.length === 0) {
+      toast("未勾选文档 — 切换为「全部未分组」再试");
+      return;
+    }
+  } else {
+    const rows = await listUngroupedDocuments();
+    targets = rows.map((d) => ({ id: d.id, filename: d.filename }));
+    if (targets.length === 0) {
+      toast("没有未分组文档 — 先导入脚本，或勾选部分文档分类");
+      return;
+    }
+  }
+  classifying.value = true;
+  classifyOpen.value = false;
+  classifyItems.value = [];
+  const system = [
+    "你是文档分类助手。根据文档内容给出一个 2-6 字的短类别名（如：名表行情、包袋话术、活动策划、科普干货）。",
+    "规则：只输出类别名本身，不输出标点、引号、序号或任何解释；同一类别的文档输出完全相同的类别名。",
+  ].join("\n");
+  const out: ClassifyItem[] = [];
+  let bad = 0;
+  for (let i = 0; i < targets.length; i++) {
+    classifyProgress.value = `${i + 1}/${targets.length}`;
+    try {
+      const chunks = await listAllChunkContent(3, [targets[i].id]);
+      const body = chunks.join("\n").slice(0, 1800) || "（空文档）";
+      const res = await runGeneration(cfg, system, `文档《${targets[i].filename}》内容：\n${body}`);
+      const cat = parseCategory(res.text);
+      if (!cat) {
+        bad++;
+        continue;
+      }
+      out.push({ docId: targets[i].id, filename: targets[i].filename, category: cat, reason: "" });
+    } catch (err) {
+      bad++;
+      console.error("[classify] item failed", targets[i].filename, err);
+    }
+  }
+  classifying.value = false;
+  classifyProgress.value = "";
+  if (out.length === 0) {
+    classifyError.value = `全部分类失败（${bad} 篇）— 检查模型档案/余额后重试`;
+    return;
+  }
+  classifyItems.value = out;
+  classifyEdits.value = {};
+  for (const it of out) classifyEdits.value[it.category] = it.category;
+  classifyOpen.value = true;
+  if (bad > 0) toast(`分类完成：${out.length} 篇成功，${bad} 篇失败（已跳过）`);
+  else toast(`分类完成：${out.length} 篇`);
+}
+
+/** 确认：按最终组名聚合 → 建组（不存在则新建）→ 批量移组 */
+async function applyClassify() {
+  if (classifying.value) return;
+  const names = classifyCategoryNames();
+  if (names.length === 0) return;
+  const groupsNow = await listGroups();
+  let created = 0;
+  let moved = 0;
+  for (const name of names) {
+    if (!name) continue;
+    let g = groupsNow.find((x) => x.name === name);
+    if (!g) {
+      const gid = await createGroup(name);
+      g = { id: gid, name, created_at: "", doc_count: 0 };
+      groupsNow.push(g);
+      created++;
+    }
+    const ids = groupOfCategory(name).map((i) => i.docId);
+    if (ids.length > 0) {
+      await setDocumentsGroup(ids, g.id);
+      moved += ids.length;
+    }
+  }
+  classifyOpen.value = false;
+  classifyItems.value = [];
+  selected.value = new Set();
+  await refresh();
+  toast(`智能分类完成：新建 ${created} 个分组，归档 ${moved} 篇文档`);
+}
+
 async function ungroupSelected() {
   const ids = [...selected.value];
   if (ids.length === 0) return;
@@ -380,6 +522,10 @@ function onDrop(e: DragEvent) {
           <span v-if="selected.size === 0" style="color:var(--text-faint);font-weight:400">· 勾选表格中文档后可批量操作</span>
         </span>
         <div class="tbl-bar-actions">
+          <button class="btn btn-ghost btn-sm" :disabled="classifying" :title="'AI 按内容自动归类（范围：' + (classifyScope === 'all' ? '全部未分组' : '勾选的文档') + '）'" @click="startClassify">
+            {{ classifying ? `智能分类 ${classifyProgress}…` : "智能分类" }}
+          </button>
+          <button class="btn btn-ghost btn-sm" :disabled="classifying || selected.size === 0" @click="classifyScope = 'selected'; startClassify()" title="仅对勾选的文档分类">分类勾选</button>
           <button class="btn btn-danger btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '删除选中文档'" @click="removeSelected">删除</button>
           <button class="btn btn-ghost btn-sm" :disabled="selected.size === 0" :title="selected.size === 0 ? '先勾选文档' : '移出分组（回到未分组）'" @click="ungroupSelected">移出分组</button>
           <button v-if="selected.size > 0" class="btn btn-ghost btn-sm" @click="selected = new Set()">取消</button>
@@ -396,6 +542,34 @@ function onDrop(e: DragEvent) {
           <button class="btn btn-primary btn-sm" @click="applyBatchGroup">应用</button>
         </template>
         <span v-else class="tag-editor-label" style="color:var(--text-faint)">勾选文档后，可在这里批量移入 / 移出分组</span>
+      </div>
+
+      <!-- 智能分类确认面板：AI 建议分组 → 用户改组名/移除 → 一键建组归档 -->
+      <div v-if="classifyOpen" class="classify-panel">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <b>智能分类结果</b>
+          <span style="font-size:12px;color:var(--text-faint)">AI 已分析 {{ classifyItems.length }} 篇，建议分组如下（组名可改，单篇可移除）</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+          <div v-for="name in classifyCategoryNames()" :key="name" class="classify-group">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <input class="input" style="width:180px" v-model="classifyEdits[name]" @blur="commitCategory(name)" @keydown.enter="commitCategory(name)" :title="'组名可编辑，回车/失焦后同组文档自动合并'" />
+              <span class="tag blue" style="font-size:11px">{{ groupOfCategory(name).length }} 篇</span>
+              <button class="btn btn-ghost btn-sm" @click="removeCategory(name)">整组移除</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+              <span v-for="it in groupOfCategory(name)" :key="it.docId" class="classify-doc">
+                {{ it.filename }}
+                <button class="classify-x" :title="'移除这篇（保持未分组）'" @click="removeItem(it.docId)">×</button>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div v-if="classifyError" style="color:var(--red);font-size:13px;margin-top:8px">{{ classifyError }}</div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary btn-sm" @click="applyClassify">✓ 确认建组并归档（{{ classifyCategoryNames().length }} 组）</button>
+          <button class="btn btn-ghost btn-sm" @click="classifyOpen = false">取消</button>
+        </div>
       </div>
       <div class="scroll-limit">
         <table class="tbl">
@@ -528,4 +702,24 @@ tr.sel td { background: rgba(232, 179, 106, 0.06); }
 .tag-editor-row td { border-top: 1px dashed var(--surface-2); }
 .tag-editor { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 0; }
 .tag-editor-label { color: var(--text-muted); font-size: 12.5px; }
+/* 智能分类确认面板 */
+.classify-panel {
+  margin: 0 14px 14px; padding: 14px;
+  border: 1px solid rgba(232, 179, 106, 0.35);
+  border-radius: 12px; background: rgba(232, 179, 106, 0.04);
+}
+.classify-group {
+  border: 1px solid var(--surface-2); border-radius: 10px; padding: 10px 12px;
+  background: var(--surface-1);
+}
+.classify-doc {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px; border-radius: 8px; background: var(--surface-2);
+  font-size: 12px; color: var(--text-muted); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.classify-x {
+  border: none; background: transparent; color: var(--text-faint); cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 0 2px;
+}
+.classify-x:hover { color: var(--red); }
 </style>

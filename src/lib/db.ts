@@ -273,6 +273,21 @@ export async function listDocuments(): Promise<DocumentRow[]> {
   }
 }
 
+/** 未分组文档（智能分类范围：all 时用；selected 范围走 listDocuments 过滤） */
+export async function listUngroupedDocuments(): Promise<DocumentRow[]> {
+  if (!isTauriRuntime()) return [];
+  try {
+    const d = await getDb();
+    const rows = await d.select<DocumentRow[]>(
+      "SELECT id, filename, file_type, file_hash, size, tags, group_id, created_at FROM documents WHERE group_id IS NULL ORDER BY created_at DESC, id DESC"
+    );
+    return rows ?? [];
+  } catch (err) {
+    console.error("[db] listUngroupedDocuments failed", err);
+    return [];
+  }
+}
+
 /** 按内容哈希查文档（去重用） */
 export async function findDocumentByHash(hash: string): Promise<DocumentRow | null> {
   const d = await getDb();
