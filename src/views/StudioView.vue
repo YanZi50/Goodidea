@@ -9,13 +9,15 @@ import {
   addCost,
 } from "../lib/ai";
 import { onUseHotspot } from "../lib/bus";
-import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, listSkills, type SkillRow, type HistoryRow } from "../lib/db";
+import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, listSkills, listGroups, fetchGroupChunks, type SkillRow, type GroupRow, type HistoryRow } from "../lib/db";
 import { checkDuplicates, type DupHit } from "../lib/similarity";
 import { validateOutput, type ValCheck } from "../lib/validate";
 
 const toast = inject("toast") as (msg: string) => void;
 
 const skillList = ref<SkillRow[]>([]); // 风格模板（db skills，v7）：名称+指令全文，可自定义
+const groupList = ref<GroupRow[]>([]); // 文档库分组（引用分组注入素材）
+const activeGroups = ref(new Set<number>()); // 选中的分组 id
 const materialChips = ["价格表 v3", "名表回收话术", "包袋验货要点", "风格库·强节奏口播"];
 const hotspotChips = ["# 名表回收新趋势", "# 二手奢侈品行情", "不使用热点"];
 const activeSkills = ref(new Set<string>());
@@ -30,6 +32,18 @@ async function loadSkills() {
   const valid = rows.map((r) => r.name);
   const cur = [...activeSkills.value].filter((n) => valid.includes(n));
   activeSkills.value = new Set(cur.length > 0 ? cur : (valid.length ? [valid[0]] : []));
+}
+
+/** 加载文档库分组（引用分组素材用） */
+async function loadGroups() {
+  const rows = await listGroups();
+  if (rows) groupList.value = rows;
+}
+function toggleGroup(id: number) {
+  const s = new Set(activeGroups.value);
+  if (s.has(id)) s.delete(id);
+  else s.add(id);
+  activeGroups.value = s;
 }
 
 const request = ref(
@@ -167,6 +181,7 @@ function restoreDraft() {
 
 onMounted(() => {
   void loadSkills();
+  void loadGroups();
   // 热点页「接入生成」→ 设置热点参考并预填需求（需求为空时）
   const off = onUseHotspot((topic) => {
     activeHot.value = `# ${topic}`;
@@ -215,6 +230,23 @@ async function fetchMaterialNotes(): Promise<{ notes: string; summary: string }>
     };
   } catch (err) {
     console.error("[studio] fetchMaterialNotes failed", err);
+    return { notes: "", summary: "" };
+  }
+}
+
+/** 引用分组素材：选中的文档库分组 → 注入组内内容（整组学习生成） */
+async function fetchGroupNotes(): Promise<{ notes: string; summary: string }> {
+  const ids = [...activeGroups.value];
+  if (ids.length === 0 || !isTauriRuntime()) return { notes: "", summary: "" };
+  try {
+    const { docCount, chunks } = await fetchGroupChunks(ids, 40);
+    if (chunks.length === 0) return { notes: "", summary: "" };
+    return {
+      notes: `\n\n## 引用分组素材（分组 ${ids.length} 个，${docCount} 篇，${chunks.length} 块，已截取）\n${chunks.map((c) => `【${c.doc}】${c.content}`).join("\n---\n")}`,
+      summary: `${docCount} 篇`,
+    };
+  } catch (err) {
+    console.error("[studio] fetchGroupNotes failed", err);
     return { notes: "", summary: "" };
   }
 }
@@ -270,10 +302,13 @@ async function generate() {
     `可选热点参考：${activeHot.value}`,
     "输出格式：按时间轴分段（如【0-3s · 钩子】），语言口语化、强节奏、短句，结尾带行动号召。",
   ].join("\n");
-  // 素材接通：从文档库按关键词检索选中素材的真实内容拼进 prompt（web/无命中降级）
+  // 素材接通：关键词检索（选中素材 chips）+ 分组引用（选中分组）两块真实内容拼进 prompt
   const mat = await fetchMaterialNotes();
-  materialHit.value = mat.summary;
-  const prompt = `需求：${request.value}${mat.notes}\n\n可用素材内容：${mat.notes ? "见上方「关联素材」章节，务必以真实内容为事实依据创作，不得编造价格与数据。" : "由知识库提供，当前提示词阶段先按需求与经验直接创作。"}`;
+  const grp = await fetchGroupNotes();
+  const matsSummary = [mat.summary, grp.summary].filter(Boolean).join(" + ");
+  materialHit.value = matsSummary;
+  const allNotes = (mat.notes + grp.notes).trim();
+  const prompt = `需求：${request.value}${allNotes ? `\n\n${allNotes}` : ""}\n\n可用素材内容：${allNotes ? "见上方「关联素材/引用分组素材」章节，务必以真实内容为事实依据创作，不得编造价格与数据。" : "由知识库提供，当前提示词阶段先按需求与经验直接创作。"}`;
   const N = versionCount.value === 3 ? 3 : 1;
 
   try {
@@ -408,6 +443,14 @@ function copyShots() {
         <div class="chips">
           <button v-for="c in materialChips" :key="c" class="chip" :class="{ on: activeMats.has(c) }" @click="toggleChip(activeMats, c)">{{ c }}</button>
         </div>
+      </div>
+      <div class="field">
+        <label class="label">引用分组 <span class="hint" style="font-weight:400;color:var(--text-faint)">可选 · 整组内容作为学习上下文，贴合组内知识生成</span></label>
+        <div class="chips">
+          <button v-for="g in groupList" :key="g.id" class="chip" :class="{ on: activeGroups.has(g.id) }" @click="toggleGroup(g.id)" :title="`组内 ${g.doc_count} 篇文档`">{{ g.name }}<template v-if="g.doc_count > 0">（{{ g.doc_count }}）</template></button>
+          <span v-if="groupList.length === 0" style="font-size:12px;color:var(--text-faint);align-self:center">暂无分组 — 先在文档库创建分组/导入脚本</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:4px">与「关联素材」关键词检索可同时生效；组内容与需求一起注入，生成以组内事实为准</div>
       </div>
       <div class="field">
         <label class="label">热点参考（可选）</label>

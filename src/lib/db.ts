@@ -509,6 +509,35 @@ export async function searchMaterialChunks(
   }
 }
 
+/** 按分组取文档分块（生成工作台「引用分组」注入；截断控制 token，组内文档数多时按块序取前 N） */
+export async function fetchGroupChunks(
+  groupIds: number[],
+  chunkLimit = 40
+): Promise<{ docCount: number; chunks: { doc: string; content: string }[] }> {
+  if (!isTauriRuntime() || groupIds.length === 0) return { docCount: 0, chunks: [] };
+  try {
+    const d = await getDb();
+    const ph = groupIds.map((_, i) => `$${i + 1}`).join(",");
+    const rows = await d.select<{ doc_id: number; filename: string; content: string }[]>(
+      `SELECT c.doc_id, doc.filename, c.content FROM chunks c
+       JOIN documents doc ON doc.id = c.doc_id
+       WHERE doc.group_id IN (${ph})
+       ORDER BY c.doc_id, c.seq
+       LIMIT ${chunkLimit}`,
+      groupIds
+    );
+    const seen = new Set<number>();
+    const chunks = rows.map((r) => {
+      seen.add(r.doc_id);
+      return { doc: r.filename, content: r.content };
+    });
+    return { docCount: seen.size, chunks };
+  } catch (err) {
+    console.error("[db] fetchGroupChunks failed", err);
+    return { docCount: 0, chunks: [] };
+  }
+}
+
 // ---- 价格表（billing_rules，v3） ----
 export interface BillingRule {
   model: string;
