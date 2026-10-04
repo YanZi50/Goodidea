@@ -7,6 +7,18 @@ fn greet(name: &str) -> String {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// 备份导出：写 JSON 文件到指定路径
+#[tauri::command]
+fn save_backup(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+/// 备份还原：读取指定路径的 JSON 备份内容
+#[tauri::command]
+fn read_backup(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
 pub fn run() {
     // P0：核心表 documents/chunks；analyses/generations/hotspot_snapshots/billing_rules 随 P1+ 递增版本迁移
     let migrations = vec![
@@ -69,17 +81,32 @@ pub fn run() {
               );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "create_histories",
+            sql: "CREATE TABLE IF NOT EXISTS histories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                output TEXT NOT NULL,
+                meta TEXT,
+                created_at TEXT NOT NULL
+              );",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:goodidea.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, save_backup, read_backup])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
