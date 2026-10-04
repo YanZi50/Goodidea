@@ -8,6 +8,7 @@ import StudioView from "./views/StudioView.vue";
 import HotspotView from "./views/HotspotView.vue";
 import UsageView from "./views/UsageView.vue";
 import SettingsView from "./views/SettingsView.vue";
+import HelpView from "./views/HelpView.vue";
 import { reloadPriceTable } from "./lib/ai";
 
 // 主题：暗色 / 浅色（侧栏底部切换；持久化，默认暗色）
@@ -28,6 +29,7 @@ const TITLES: Record<string, [string, string]> = {
   hotspot: ["实时热点", "跨平台热榜，一键接入生成"],
   usage: ["消耗统计", "各模型费用与每日用量一目了然"],
   settings: ["设置", "密钥 · 模型 · 热点源 · 价格表"],
+  help: ["帮助中心", "快速上手 · 功能说明 · 常见问题"],
 };
 
 const activeView = ref<string>("library");
@@ -76,6 +78,7 @@ onMounted(() => {
         <HotspotView v-show="activeView === 'hotspot'" />
         <UsageView v-show="activeView === 'usage'" />
         <SettingsView v-show="activeView === 'settings'" />
+        <HelpView v-show="activeView === 'help'" />
       </div>
     </div>
   </div>

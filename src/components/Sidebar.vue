@@ -93,7 +93,7 @@ async function exportBackup() {
         </button>
       </div>
       <div class="foot-btns">
-        <button class="foot-btn" @click="toast('设置与帮助即将开放（设计稿演示）')">
+        <button class="foot-btn" @click="navigate('help')">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></svg><span>帮助</span>
         </button>
         <button class="foot-btn" @click="exportBackup" title="导出知识库备份（文档/分组/价格表/模型档案 JSON）">
