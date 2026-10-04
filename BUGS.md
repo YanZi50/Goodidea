@@ -200,7 +200,7 @@
 ## BUG-017：备份还原后分组全部丢失、已分组文档成孤儿隐身——groups 还原未保留 id，group_id 引用断裂
 
 - **日期**：2026-10-04
-- **关联 commit**：@待回填
+- **关联 commit**：@548d571
 - **所属模块**：备份还原（src-tauri/src/lib.rs import_backup + src/lib/db.ts exportBackupData）
 - **症状**：用户还原备份后文档库「分组」面板显示 0 个组，「未分组」只剩 25 篇，其余 62 篇在列表、统计、分析中全部「消失」；库内 `documents.group_id` 指向已不存在的分组 id（1814/1815/1817/1818/650），groups 表为空。删除分组行为本身正常（deleteGroup 先置 NULL 再删组，自引入起正确）。
 - **根因**：`import_backup` 重建分组时执行 `INSERT INTO groups (name, created_at)`——**不插入备份中的原始 id**，SQLite 按自增序列重新分配新 id；而 documents 插入用的是备份里的**原始 group_id**。旧库 group_id 是 1000+ 的大 id，重建后 groups 新 id 从 1（或自增序列末值）起，两者永不对应 → 已分组文档全部成为孤儿（LEFT JOIN 不显示、COUNT(group_id IS NULL) 不计入）→ 分组 0 个 + 未分组只剩备份时本来就未分组的文档。根源是备份格式 v1 的 groups 未携带 id，还原时 id 语义丢失。
