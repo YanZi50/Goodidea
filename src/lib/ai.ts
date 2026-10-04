@@ -1,8 +1,8 @@
 // AI 接入层：Vercel AI SDK v7 + OpenAI 兼容（豆包=火山方舟 /api/v3，也可接任意 OpenAI 兼容端点）
-// 配置存 localStorage（仅本机浏览器存储，不入库、不入 git）；P2 起价格表迁入 billing_rules 表
+// 多模型档案：SQLite ai_profiles（v4）；web 预览降级 localStorage 单配置；价格表在 billing_rules 表
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, streamText } from "ai";
-import { listBillingRules } from "./db";
+import { listBillingRules, isTauriRuntime, getActiveProfile, updateProfile, createProfile } from "./db";
 
 export interface AIConfig {
   label: string; // 显示名（消耗统计按此归组）
@@ -35,7 +35,38 @@ export function loadAIConfig(): AIConfig | null {
   }
 }
 
-export function saveAIConfig(cfg: AIConfig): void {
+/**
+ * 读取当前生效的模型配置（多档案体系）：
+ * Tauri 运行时 → SQLite ai_profiles 的 active 档案；web 预览 → localStorage 单配置兜底
+ */
+export async function loadActiveConfig(): Promise<AIConfig | null> {
+  if (isTauriRuntime()) {
+    const p = await getActiveProfile();
+    if (!p) return null;
+    return {
+      label: p.label,
+      baseURL: p.base_url,
+      model: p.model,
+      apiKey: p.api_key,
+      thinking: p.thinking === 1,
+    };
+  }
+  return loadAIConfig();
+}
+
+/**
+ * 保存模型配置：Tauri 时写 active 档案（无档案则新建第一份）；web 降级 localStorage
+ */
+export async function saveAIConfig(cfg: AIConfig): Promise<void> {
+  if (isTauriRuntime()) {
+    const p = await getActiveProfile();
+    if (p) {
+      await updateProfile(p.id, { label: cfg.label, base_url: cfg.baseURL, model: cfg.model, api_key: cfg.apiKey, thinking: cfg.thinking });
+    } else {
+      await createProfile({ label: cfg.label, base_url: cfg.baseURL, model: cfg.model, api_key: cfg.apiKey, thinking: cfg.thinking ?? false });
+    }
+    return;
+  }
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
 }
 

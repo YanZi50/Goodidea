@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import {
-  loadAIConfig,
+  loadActiveConfig,
   streamGeneration,
   calcCost,
   addCost,
@@ -141,7 +141,7 @@ async function fetchMaterialNotes(): Promise<{ notes: string; summary: string }>
 }
 
 async function generate() {
-  const cfg = loadAIConfig();
+  const cfg = await loadActiveConfig();
   if (!cfg) {
     toast("请先到「设置 → 模型接入」配置 API Key 与模型 ID");
     return;

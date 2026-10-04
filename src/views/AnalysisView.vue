@@ -5,7 +5,7 @@ import DOMPurify from "dompurify";
 import { listDocuments, countChunks, listAllChunkContent, listGroups } from "../lib/db";
 import { onDataChanged, onAnalyzeDocRequest } from "../lib/bus";
 import {
-  loadAIConfig,
+  loadActiveConfig,
   runGeneration,
   calcCost,
   addCost,
@@ -73,7 +73,7 @@ async function refresh() {
   if (docScope.value !== null && !docsCache.value.some((d) => d.id === docScope.value)) docScope.value = null;
   await refreshScopeStats();
   today.value = todayCost();
-  modelLabel.value = loadAIConfig()?.label ?? "";
+  modelLabel.value = (await loadActiveConfig())?.label ?? "";
 }
 
 async function refreshScopeStats() {
@@ -178,7 +178,7 @@ watch(renderedResult, async () => {
 });
 
 async function runAnalysis() {
-  const cfg = loadAIConfig();
+  const cfg = await loadActiveConfig();
   if (!cfg) {
     toast("请先到「设置 → 模型接入」配置 API Key 与模型 ID");
     return;
