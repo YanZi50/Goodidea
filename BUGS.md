@@ -164,12 +164,12 @@
 ## BUG-014：备份还原失败——tauri-plugin-sql 连接池下 last_insert_rowid() 跨连接取错
 
 - **日期**：2026-10-04
-- **关联 commit**：@47a0c9d（引入），修复 @待回填
-- **所属模块**：知识库备份还原（src/lib/db.ts importBackupData）
-- **症状**：真机「还原备份」失败（导入计数异常或 chunks.doc_id 指向不存在的文档，文档可导入但分块错位）。
-- **根因**：tauri-plugin-sql 内部为连接池（r2d2/SQLite 单写者），`d.execute(INSERT)` 与随后 `SELECT last_insert_rowid()` 可能命中**不同连接**，返回的不是本次 INSERT 的自增 id（跨连接读不到/读错）。基于 last_insert_rowid 重建 doc_id 映射的方案在池化连接下不可靠。
-- **解决**：改为**显式 id 插入**——`INSERT INTO documents (id, ...)` 直接写入备份中的原始 doc.id（SQLite AUTOINCREMENT 允许显式指定主键，且会把 sqlite_sequence 提升到 max(id)，后续自增不受影响），chunks 沿用备份 doc_id，彻底移除 last_insert_rowid 依赖；另在还原解析处对 JSON 做 BOM 容错（`content.replace(/^\uFEFF/, "")`）。
-- **预防**：连接池环境下禁止依赖 `last_insert_rowid()`/`last_insert_rowid` 跨语句取值；需要主键关联时优先显式写 id 或用事务内单连接保证。代码注释已标注（db.ts importBackupData）。
+- **关联 commit**：@47a0c9d（引入）、@18d7262（显式 id 缓解）、@待回填（根治）
+- **所属模块**：知识库备份还原（src/lib/db.ts importBackupData + src-tauri/src/lib.rs import_backup）
+- **症状**：真机「还原备份」失败（导入计数异常或 chunks.doc_id 指向不存在的文档，文档可导入但分块错位；后续版本表现为 toast「还原失败（数据库不可用）」且库内无数据写入）。
+- **根因**：两层问题。① tauri-plugin-sql 内部为连接池（r2d2/sqlx），`d.execute(INSERT)` 与随后 `SELECT last_insert_rowid()` 可能命中**不同连接**，返回的不是本次 INSERT 的自增 id（跨连接读不到/读错）；② 连接池下 `BEGIN / DELETE / INSERT / COMMIT` 各语句同样可能落在不同连接，事务语义完全失效（BEGIN 连接 A 上开了空事务，写入在连接 B/C 上 autocommit），前端无法保证原子还原；且原实现对错误只 console.error 后返回 null，界面误报「数据库不可用」，看不到真实 SQLite 错误。
+- **解决**：还原整体下沉 Rust——新增 `import_backup(app, json)` 命令（rusqlite bundled），单连接上执行 `PRAGMA foreign_keys=OFF; BEGIN IMMEDIATE; → DELETE/INSERT（参数绑定）→ COMMIT`，任一步失败整体 ROLLBACK；解析失败/非法备份/执行失败均返回具体错误字符串，前端 invoke reject 后 toast 透传真实原因。导出仍为前端生成 JSON（只读，无事务风险）。
+- **预防**：连接池环境下禁止依赖跨语句事务与 `last_insert_rowid()`；需要多语句原子操作时下沉 Rust 单连接（rusqlite/sqlx Connection 而非 Pool）；前端收到 null/失败时把底层错误透传给用户，不吞错。代码注释已标注（db.ts importBackupData、lib.rs import_backup）。
 
 ---
 
