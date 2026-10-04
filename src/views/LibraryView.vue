@@ -509,9 +509,9 @@ function onDrop(e: DragEvent) {
         <button class="chip" :class="{ on: groupFilter === 'all' }" @click="groupFilter = 'all'">全部 {{ docs.length }}</button>
         <button class="chip" :class="{ on: groupFilter === 'none' }" @click="groupFilter = 'none'">未分组 {{ ungroupedCount }}</button>
         <span v-for="g in groups" :key="g.id" class="g-chip-wrap">
-          <!-- chip 本体始终显示组名+数量（宽度不变零跳动）；删除入口为右上角小 pill，确认态原位变红底白字 -->
-          <button class="chip g-chip" :class="{ on: groupFilter === g.id }" @click="groupFilter = g.id">{{ g.name }} {{ g.doc_count }}</button>
-          <button class="g-del" :class="{ confirm: groupDelId === g.id }" :title="groupDelId === g.id ? '再次点击确认删除（组内文档移回未分组）' : '删除分组（组内文档移回未分组）'" @click.stop="removeGroup(g)">{{ groupDelId === g.id ? "确认" : "删除" }}</button>
+          <!-- 确认删除态：chip 本体原位变红字（不挤布局、不被裁剪）；× 入口仅在普通态显示 -->
+          <button class="chip g-chip" :class="{ on: groupFilter === g.id, deleting: groupDelId === g.id }" @click="groupDelId === g.id ? removeGroup(g) : (groupFilter = g.id)">{{ groupDelId === g.id ? "确认删除？" : `${g.name} ${g.doc_count}` }}</button>
+          <button v-if="groupDelId !== g.id" class="g-del" title="删除分组（组内文档移回未分组）" @click.stop="removeGroup(g)">×</button>
         </span>
         <button class="btn btn-ghost btn-sm" @click="creatingGroup = true">+ 新建组</button>
       </div>
@@ -671,7 +671,7 @@ function onDrop(e: DragEvent) {
 
 <style scoped>
 /* 组导航外层容器：创建分组悬浮面板的定位锚点；上边距加大（离搜索栏远几个像素） */
-.group-nav-wrap { position: relative; margin: 12px 0 8px; }
+.group-nav-wrap { position: relative; margin: 16px 0 14px; }
 .group-nav { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
 /* 创建分组悬浮面板：absolute 不占 flow，导航布局零跳动；面板覆盖下方内容可接受（带底色阴影） */
 .g-create-panel {
@@ -688,16 +688,17 @@ function onDrop(e: DragEvent) {
 }
 .chip.on { background: var(--accent); color: #0b0e13; border-color: var(--accent); }
 .g-chip-wrap { position: relative; display: inline-flex; }
-/* 删除入口：chip 右上角小 pill「删除」（红字明显）；确认态原位红底白字「确认」（absolute 不占布局，零跳动） */
+/* 删除入口：chip 右上角小圆 × 按钮；确认态 chip 本体原位变红字「确认删除？」（不挤布局、不被裁剪） */
 .g-del {
-  position: absolute; right: 0; top: -8px; height: 17px; line-height: 15px;
-  border-radius: 999px; border: 1px solid var(--red); background: rgba(244, 67, 54, 0.08);
-  color: var(--red); font-size: 10.5px; padding: 0 6px; cursor: pointer;
-  text-align: center; white-space: nowrap; z-index: 2; font-weight: 600;
+  position: absolute; right: -5px; top: -7px; width: 16px; height: 16px; line-height: 14px;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0; text-align: center; z-index: 2;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
-.g-del.confirm { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 700; }
-.g-del.confirm:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+.chip.deleting {
+  background: rgba(244, 67, 54, 0.12); border-color: var(--red);
+  color: var(--red); font-weight: 700;
+}
 .g-new-input { width: 140px; padding: 5px 10px; }
 .paste-panel {
   border: 1px solid rgba(232, 179, 106, 0.3); border-radius: 10px;
@@ -745,8 +746,8 @@ tr.sel td { background: rgba(232, 179, 106, 0.06); }
   font-size: 13px; line-height: 1; padding: 0 2px;
 }
 .classify-x:hover { color: var(--red); }
-/* 列表 6 行限高 + 表头冻结；隐藏滚动条滑块（滚轮仍可滚，页面更简洁） */
-.scroll-limit { max-height: 300px; scrollbar-width: none; }
+/* 列表 7 行限高 + 表头冻结；隐藏滚动条滑块（滚轮仍可滚，页面更简洁） */
+.scroll-limit { max-height: 352px; scrollbar-width: none; }
 .scroll-limit::-webkit-scrollbar { display: none; }
 .scroll-limit thead th {
   position: sticky; top: 0; z-index: 1;
