@@ -207,6 +207,16 @@ interface ShotRow {
 const shotOpen = ref(false);
 const shotRows = ref<ShotRow[]>([]);
 
+/** 分镜内容清洗：去掉 Markdown 符号，只留干净文本（供表格展示与复制） */
+function cleanBody(s: string): string {
+  return s
+    .replace(/\*\*/g, "") // 加粗符号（整段包裹或行内）
+    .replace(/^#+\s?/gm, "") // 行首标题符号（## / #）
+    .replace(/^-\s+/gm, "") // 行首列表符号
+    .replace(/^>\s?/gm, "") // 引用符号
+    .trim();
+}
+
 function parseShots(text: string): ShotRow[] {
   const re = /【\s*([\d.:]+)\s*-\s*([\d.:]+)s?\s*(?:·|,|，|\|)?\s*([^】]*)】/g;
   const segs: { a: string; b: string; tag: string; i: number; len: number }[] = [];
@@ -220,7 +230,7 @@ function parseShots(text: string): ShotRow[] {
     const bodyStart = s.i + s.len;
     const bodyEnd = k + 1 < segs.length ? segs[k + 1].i : text.length;
     const body = text.slice(bodyStart, bodyEnd).replace(/^\n+|\n+$/g, "").trim();
-    rows.push({ n: k + 1, t: `${s.a}-${s.b}s`, tag: s.tag || "分镜", content: body });
+    rows.push({ n: k + 1, t: `${s.a}-${s.b}s`, tag: cleanBody(s.tag) || "分镜", content: cleanBody(body) });
   }
   return rows;
 }
