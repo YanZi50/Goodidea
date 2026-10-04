@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted, inject } from "vue";
-import { dbStatus, listBillingRules, upsertBillingRule } from "../lib/db";
 import {
-  loadAIConfig,
-  saveAIConfig,
-  clearAIConfig,
-  DEFAULT_CONFIG,
-  PRICE_TABLE,
-  reloadPriceTable,
-  type AIConfig,
-} from "../lib/ai";
+  dbStatus,
+  listBillingRules,
+  upsertBillingRule,
+  listProfiles,
+  createProfile,
+  updateProfile,
+  deleteProfile,
+  setActiveProfile,
+  migrateLegacyConfig,
+  type AIProfile,
+} from "../lib/db";
+import { PRICE_TABLE, reloadPriceTable } from "../lib/ai";
 
 const toast = inject("toast") as (msg: string) => void;
 
+// ---- 数据存储状态 ----
 const status = ref<{ connected: boolean; tables: string[]; documents: number; error?: string }>({
   connected: false,
   tables: [],
@@ -20,34 +24,103 @@ const status = ref<{ connected: boolean; tables: string[]; documents: number; er
 });
 const checking = ref(true);
 
-const cfg = ref<AIConfig>({ ...DEFAULT_CONFIG });
-const configured = ref(false);
-
 onMounted(async () => {
   status.value = await dbStatus();
   checking.value = false;
-  const saved = loadAIConfig();
-  if (saved) {
-    cfg.value = { ...saved };
-    configured.value = true;
-  }
+  await migrateLegacyConfig(); // 旧单配置首次升级为档案
+  await loadProfiles();
 });
 
-function save() {
-  if (!cfg.value.apiKey.trim() || !cfg.value.model.trim()) {
-    toast("API Key 与模型 ID 不能为空");
-    return;
-  }
-  saveAIConfig({ ...cfg.value, label: cfg.value.label.trim() || "自定义模型" });
-  configured.value = true;
-  toast("模型配置已保存（仅存本机，不入库）");
+// ---- 模型档案 ----
+const profiles = ref<AIProfile[]>([]);
+const loading = ref(false);
+const editId = ref<number | "new" | null>(null); // 正在编辑的档案 id（"new"=新增草稿）
+const confirmDel = ref<number | null>(null); // 待确认删除的 id（二次确认）
+
+interface EditForm {
+  label: string;
+  base_url: string;
+  model: string;
+  api_key: string; // 编辑已有档案时留空 = 保留原 key
+  thinking: boolean;
 }
 
-function clear() {
-  clearAIConfig();
-  configured.value = false;
-  cfg.value = { ...DEFAULT_CONFIG };
-  toast("已清除模型配置");
+const form = ref<EditForm>({ label: "", base_url: "", model: "", api_key: "", thinking: false });
+
+const DEFAULT_BASE = "https://ark.cn-beijing.volces.com/api/v3";
+
+function maskKey(k: string): string {
+  if (!k) return "未填写";
+  return k.length <= 8 ? "sk-****" : `sk-****${k.slice(-4)}`;
+}
+
+async function loadProfiles() {
+  loading.value = true;
+  try {
+    const list = await listProfiles();
+    profiles.value = list ?? [];
+  } catch {
+    profiles.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+function startEdit(p: AIProfile) {
+  editId.value = p.id;
+  form.value = {
+    label: p.label,
+    base_url: p.base_url,
+    model: p.model,
+    api_key: "", // 留空=保留原 key
+    thinking: p.thinking === 1,
+  };
+}
+
+function startNew() {
+  editId.value = "new";
+  form.value = { label: "自定义模型", base_url: DEFAULT_BASE, model: "", api_key: "", thinking: false };
+}
+
+function cancelEdit() {
+  editId.value = null;
+}
+
+async function saveEdit() {
+  const f = form.value;
+  if (!f.label.trim()) { toast("显示名不能为空"); return; }
+  if (!f.model.trim()) { toast("模型 ID 不能为空"); return; }
+  if (!f.base_url.trim()) { toast("API Base URL 不能为空"); return; }
+  if (editId.value === "new") {
+    if (!f.api_key.trim()) { toast("API Key 不能为空"); return; }
+    await createProfile({ label: f.label.trim(), base_url: f.base_url.trim(), model: f.model.trim(), api_key: f.api_key.trim(), thinking: f.thinking });
+    toast("已新增模型档案" + (profiles.value.length === 0 ? "（首份档案已自动设为当前）" : ""));
+  } else if (editId.value !== null) {
+    const patch: Parameters<typeof updateProfile>[1] = { label: f.label.trim(), base_url: f.base_url.trim(), model: f.model.trim(), thinking: f.thinking };
+    if (f.api_key.trim()) patch.api_key = f.api_key.trim(); // 留空保留原 key
+    await updateProfile(editId.value, patch);
+    toast("已保存模型档案");
+  }
+  editId.value = null;
+  await loadProfiles();
+}
+
+async function makeActive(p: AIProfile) {
+  await setActiveProfile(p.id);
+  await loadProfiles();
+  toast(`已切换当前模型：${p.label}`);
+}
+
+async function removeProfile(p: AIProfile) {
+  if (confirmDel.value !== p.id) {
+    confirmDel.value = p.id;
+    window.setTimeout(() => { if (confirmDel.value === p.id) confirmDel.value = null; }, 3000);
+    return;
+  }
+  confirmDel.value = null;
+  await deleteProfile(p.id);
+  await loadProfiles();
+  toast(`已删除档案「${p.label}」` + (p.is_active === 1 && profiles.value.length > 0 ? "，当前模型已自动切换" : ""));
 }
 
 // ---- 价格表（billing_rules 可维护；db 优先，常量兜底） ----
@@ -111,41 +184,117 @@ async function priceSave() {
 <template>
   <div>
     <div class="card" style="margin-bottom:14px">
-      <div class="card-title">模型接入 <span class="hint">P1 · OpenAI 兼容</span></div>
+      <div class="card-title">模型接入 <span class="hint">多档案 · 一键切换</span></div>
       <div style="color:var(--text-muted);font-size:13.5px">
-        默认指向火山方舟（豆包）OpenAI 兼容端点，也可填任意兼容端点。密钥仅存本机浏览器存储，不入库、不进 git。
-        <span v-if="configured" style="color:var(--green)">　已配置 ✓</span>
+        可接入多份模型档案（豆包 / DeepSeek / 任意 OpenAI 兼容端点），顶部下拉一键切换当前模型。
+        密钥仅存本机 SQLite，不入库、不进 git。
+        <span v-if="profiles.some((p) => p.is_active === 1)" style="color:var(--green)">　当前已配置 ✓</span>
         <span v-else style="color:var(--red)">　未配置</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
-        <div class="field" style="margin:0">
-          <label class="label">显示名</label>
-          <input class="input" v-model="cfg.label" placeholder="如：豆包 doubao-seed-2.0-pro" />
-        </div>
-        <div class="field" style="margin:0">
-          <label class="label">模型 ID</label>
-          <input class="input" v-model="cfg.model" placeholder="火山方舟模型版本 ID 或 ep-xxx" />
-        </div>
-        <div class="field" style="margin:0;grid-column:1 / -1">
-          <label class="label">API Base URL</label>
-          <input class="input" v-model="cfg.baseURL" />
-        </div>
-        <div class="field" style="margin:0;grid-column:1 / -1">
-          <label class="label">API Key</label>
-          <input class="input" v-model="cfg.apiKey" type="password" placeholder="sk-…（仅存本机）" />
-        </div>
-        <div class="field" style="margin:0;grid-column:1 / -1">
-          <label class="label">思考模式 <span class="hint" style="color:var(--text-faint);font-weight:400">DeepSeek V4 默认思考、reasoning 按输出价计费且更慢</span></label>
-          <label class="toggle-row">
-            <input type="checkbox" v-model="cfg.thinking" />
-            <span class="toggle-track"><span class="toggle-knob"></span></span>
-            <span class="toggle-text">{{ cfg.thinking ? "开启（复杂推理更强，更慢更贵）" : "关闭（分析 / 生成更快更省，推荐）" }}</span>
-          </label>
+
+      <div v-if="loading" style="font-size:13px;color:var(--text-faint);padding:10px 0">加载中…</div>
+
+      <div v-else-if="profiles.length > 0" class="profile-list">
+        <div v-for="p in profiles" :key="p.id" class="profile-card" :class="{ active: p.is_active === 1 }">
+          <template v-if="editId === p.id">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field" style="margin:0">
+                <label class="label">显示名</label>
+                <input class="input" v-model="form.label" placeholder="如：DeepSeek v4-flash" />
+              </div>
+              <div class="field" style="margin:0">
+                <label class="label">模型 ID</label>
+                <input class="input" v-model="form.model" placeholder="如 deepseek-v4-flash" />
+              </div>
+              <div class="field" style="margin:0;grid-column:1 / -1">
+                <label class="label">API Base URL</label>
+                <input class="input" v-model="form.base_url" />
+              </div>
+              <div class="field" style="margin:0;grid-column:1 / -1">
+                <label class="label">API Key <span class="hint" style="color:var(--text-faint);font-weight:400">留空 = 保留原密钥（已脱敏 {{ maskKey(p.api_key) }}）</span></label>
+                <input class="input" v-model="form.api_key" type="password" placeholder="留空则保留原 Key，填了则覆盖" />
+              </div>
+              <div class="field" style="margin:0;grid-column:1 / -1">
+                <label class="toggle-row">
+                  <input type="checkbox" v-model="form.thinking" />
+                  <span class="toggle-track"><span class="toggle-knob"></span></span>
+                  <span class="toggle-text">{{ form.thinking ? "思考模式开启（复杂推理更强，更慢更贵）" : "思考模式关闭（更快更省，推荐）" }}</span>
+                </label>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-primary btn-sm" @click="saveEdit">保存</button>
+              <button class="btn btn-ghost btn-sm" @click="cancelEdit">取消</button>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="profile-main">
+              <div class="profile-info">
+                <div class="profile-title">
+                  <b>{{ p.label }}</b>
+                  <span v-if="p.is_active === 1" class="tag gold">当前</span>
+                  <span class="profile-thinking">{{ p.thinking === 1 ? "思考开" : "思考关" }}</span>
+                </div>
+                <div class="profile-meta">
+                  <span class="pm">{{ p.model }}</span>
+                  <span class="pm faint" :title="p.base_url">{{ p.base_url }}</span>
+                  <span class="pm faint">{{ maskKey(p.api_key) }}</span>
+                </div>
+              </div>
+              <div class="profile-ops">
+                <button v-if="p.is_active !== 1" class="btn btn-soft btn-sm" @click="makeActive(p)">设为当前</button>
+                <button class="btn btn-ghost btn-sm" @click="startEdit(p)">编辑</button>
+                <button class="btn btn-ghost btn-sm danger" @click="removeProfile(p)">
+                  {{ confirmDel === p.id ? "确认删除？" : "删除" }}
+                </button>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
+
+      <div v-else class="profile-empty">
+        <div style="color:var(--text-muted);font-size:13.5px">还没有模型档案——添加第一份即自动设为当前模型。</div>
+      </div>
+
+      <template v-if="editId === 'new'">
+        <div class="profile-card" style="border-color:var(--accent)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="field" style="margin:0">
+              <label class="label">显示名</label>
+              <input class="input" v-model="form.label" placeholder="如：DeepSeek v4-flash" />
+            </div>
+            <div class="field" style="margin:0">
+              <label class="label">模型 ID</label>
+              <input class="input" v-model="form.model" placeholder="如 deepseek-v4-flash" />
+            </div>
+            <div class="field" style="margin:0;grid-column:1 / -1">
+              <label class="label">API Base URL</label>
+              <input class="input" v-model="form.base_url" />
+            </div>
+            <div class="field" style="margin:0;grid-column:1 / -1">
+              <label class="label">API Key</label>
+              <input class="input" v-model="form.api_key" type="password" placeholder="sk-…（仅存本机 SQLite）" />
+            </div>
+            <div class="field" style="margin:0;grid-column:1 / -1">
+              <label class="toggle-row">
+                <input type="checkbox" v-model="form.thinking" />
+                <span class="toggle-track"><span class="toggle-knob"></span></span>
+                <span class="toggle-text">{{ form.thinking ? "思考模式开启（复杂推理更强，更慢更贵）" : "思考模式关闭（更快更省，推荐）" }}</span>
+              </label>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary btn-sm" @click="saveEdit">保存</button>
+            <button class="btn btn-ghost btn-sm" @click="cancelEdit">取消</button>
+          </div>
+        </div>
+      </template>
+
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-primary btn-sm" @click="save">保存配置</button>
-        <button class="btn btn-ghost btn-sm" @click="clear">清除</button>
+        <button class="btn btn-primary btn-sm" @click="startNew">+ 新增模型</button>
+        <span style="font-size:12px;color:var(--text-faint);align-self:center">顶部下拉可直接切换当前模型，消耗统计按档案自动分组</span>
       </div>
     </div>
 
@@ -206,3 +355,25 @@ async function priceSave() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.profile-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.profile-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 12px 14px;
+}
+.profile-card.active { border-color: var(--accent); background: linear-gradient(180deg, var(--accent-soft), transparent 60%), var(--surface-2); }
+.profile-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.profile-info { flex: 1; min-width: 220px; }
+.profile-title { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.profile-thinking { font-size: 11.5px; color: var(--text-faint); border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; }
+.profile-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; font-size: 12.5px; }
+.pm { color: var(--text-muted); }
+.pm.faint { color: var(--text-faint); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-ops { display: flex; gap: 8px; align-items: center; }
+.btn.danger { color: var(--red); border-color: rgba(229, 115, 110, .35); }
+.btn.danger:hover { background: rgba(229, 115, 110, .12); }
+.profile-empty { margin-top: 12px; padding: 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+</style>
