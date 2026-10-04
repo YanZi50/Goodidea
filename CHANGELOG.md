@@ -186,4 +186,4 @@
 ### Fixed（消耗统计恒为 0，BUG-016）
 - **计费按模型名匹配**：生成/分析消耗改传 `cfg.model`（模型名，如 deepseek-v4-flash）而非档案 label（如 Deepseek）——此前价格表按模型名 `includes` 匹配永远不命中，单价算 0、统计不累计；DeepSeek 官网有消耗而应用内恒为 ¥0.00（@643b2fc）
 - **统计页未收录提示**：消耗统计「按模型」列表对未收录单价的模型显示「未收录单价（可在设置→价格表添加）」替代误导性的 ¥0/1M（@643b2fc）
-- 验证：vue-tsc + vite build 全绿（409 模块）；匹配逻辑代码审查（priceFor includes 对 deepseek-v4-flash 命中），真机消耗累计待确认（@待回填）
+- 验证：vue-tsc + vite build 全绿（409 模块）；匹配逻辑代码审查（priceFor includes 对 deepseek-v4-flash 命中），真机消耗累计待确认（@643b2fc）
