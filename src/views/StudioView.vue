@@ -9,7 +9,7 @@ import {
   addCost,
 } from "../lib/ai";
 import { onUseHotspot } from "../lib/bus";
-import { isTauriRuntime, searchMaterialChunks } from "../lib/db";
+import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, type HistoryRow } from "../lib/db";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -28,6 +28,42 @@ const generating = ref(false);
 const meta = ref<{ model: string; tokens: string; cost: string } | null>(null);
 const materialHit = ref(""); // 素材检索命中摘要（如「3 篇」），空=未命中/降级
 const outBox = ref<HTMLElement | null>(null); // 输出容器（复制时取渲染后干净文本）
+
+// ---- 历史记录（histories，v5）：回看 + 一键复用 ----
+const historyOpen = ref(false);
+const histories = ref<HistoryRow[]>([]);
+
+async function loadHistory() {
+  if (isTauriRuntime()) histories.value = (await listHistories(10, "generation")) ?? [];
+}
+function toggleHistory() {
+  historyOpen.value = !historyOpen.value;
+  if (historyOpen.value) void loadHistory();
+}
+function reuseHistory(h: HistoryRow) {
+  output.value = h.output;
+  request.value = h.prompt;
+  try {
+    meta.value = h.meta ? (JSON.parse(h.meta) as { model: string; tokens: string; cost: string }) : null;
+  } catch {
+    meta.value = null;
+  }
+  toast(`已回填历史「${h.title}」`);
+}
+async function delHistory(h: HistoryRow) {
+  await deleteHistory(h.id);
+  await loadHistory();
+}
+function histTime(iso: string): string {
+  return new Date(iso).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+function histMeta(h: HistoryRow): { model?: string; cost?: string } {
+  try {
+    return h.meta ? (JSON.parse(h.meta) as { model?: string; cost?: string }) : {};
+  } catch {
+    return {};
+  }
+}
 
 /** Markdown → 安全 HTML：与智能分析一致的渲染通道，流式内容实时转换 */
 const renderedOutput = computed(() => {
@@ -178,6 +214,13 @@ async function generate() {
       tokens: `${cost.inputTokens.toLocaleString()} in / ${cost.outputTokens.toLocaleString()} out`,
       cost: `¥${cost.amount.toFixed(2)}`,
     };
+    await recordHistory({
+      kind: "generation",
+      title: request.value.slice(0, 40),
+      prompt: request.value,
+      output: output.value,
+      meta: JSON.stringify(meta.value),
+    });
     toast(`生成完成 · ${meta.value.cost}`);
   } catch (err) {
     toast(`生成失败：${err instanceof Error ? err.message : String(err)}`);
@@ -320,6 +363,20 @@ function copyShots() {
         <button class="btn btn-green btn-sm" @click="copyText">复制全文</button>
         <button class="btn btn-ghost btn-sm" @click="exportShots" :disabled="!output || generating">导出分镜表</button>
         <button class="btn btn-ghost btn-sm" :disabled="generating" @click="generate">重新生成</button>
+        <button class="btn btn-ghost btn-sm" @click="toggleHistory">{{ historyOpen ? "收起历史" : "历史记录" }}</button>
+      </div>
+      <div v-if="historyOpen" class="hist-panel">
+        <div v-if="histories.length === 0" style="font-size:13px;color:var(--text-faint);padding:8px 0">暂无生成历史 — 完成一次生成后自动记录</div>
+        <div v-for="h in histories" :key="h.id" class="hist-item" @click="reuseHistory(h)">
+          <div class="hi-main">
+            <div class="hi-title">{{ h.title }}</div>
+            <div class="hi-sub">{{ histTime(h.created_at) }}<template v-if="histMeta(h).model"> · {{ histMeta(h).model }}</template><template v-if="histMeta(h).cost"> · {{ histMeta(h).cost }}</template></div>
+          </div>
+          <button class="icon-btn hi-del" title="删除这条历史" @click.stop="delHistory(h)">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></svg>
+          </button>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:6px">点击条目回填输出与需求（可复用后重新生成）</div>
       </div>
       <div v-if="shotOpen" class="shot-panel">
         <div class="shot-head">
@@ -360,4 +417,26 @@ function copyShots() {
 .shot-table th { color: var(--text-muted); background: rgba(255, 255, 255, 0.04); white-space: nowrap; }
 .shot-table td:first-child { width: 36px; color: var(--text-faint); text-align: center; }
 .shot-table td:nth-child(2) { width: 70px; white-space: nowrap; }
+.hist-panel {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 8px 10px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.hist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.hist-item:hover { background: var(--surface-2); }
+.hi-main { flex: 1; min-width: 0; }
+.hi-title { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hi-sub { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+.hi-del { flex-shrink: 0; }
 </style>
