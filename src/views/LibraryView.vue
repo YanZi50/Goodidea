@@ -688,11 +688,11 @@ function onDrop(e: DragEvent) {
 }
 .chip.on { background: var(--accent); color: #0b0e13; border-color: var(--accent); }
 .g-chip-wrap { position: relative; display: inline-flex; }
-/* 删除入口：chip 右上角小圆 × 按钮；确认态 chip 本体原位变红字「确认删除？」（不挤布局、不被裁剪） */
+/* 删除入口：chip 右上角红 × 角标（明显可见）；确认态 chip 本体原位变红字「确认删除？」（不挤布局、不被裁剪） */
 .g-del {
-  position: absolute; right: -5px; top: -7px; width: 16px; height: 16px; line-height: 14px;
-  border-radius: 50%; border: 1px solid var(--border); background: var(--surface-1);
-  color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0; text-align: center; z-index: 2;
+  position: absolute; right: -6px; top: -8px; width: 17px; height: 17px; line-height: 15px;
+  border-radius: 50%; border: 1px solid var(--red); background: rgba(244, 67, 54, 0.1);
+  color: var(--red); font-size: 12px; cursor: pointer; padding: 0; text-align: center; z-index: 2; font-weight: 700;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
 .chip.deleting {

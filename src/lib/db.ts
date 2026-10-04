@@ -298,7 +298,8 @@ export async function findDocumentByHash(hash: string): Promise<DocumentRow | nu
   return rows[0] ?? null;
 }
 
-/** 插入文档，返回自增 id；groupId 为空时归入未分组 */
+/** 插入文档，返回自增 id；groupId 为空时归入未分组。
+ *  用 INSERT...RETURNING 原子取 id——禁止 last_insert_rowid()（连接池下跨连接返回 0/错位，BUG-017 根因） */
 export async function insertDocument(doc: {
   filename: string;
   file_type: string;
@@ -308,11 +309,10 @@ export async function insertDocument(doc: {
   group_id?: number | null;
 }): Promise<number> {
   const d = await getDb();
-  await d.execute(
-    "INSERT INTO documents (filename, file_type, file_hash, size, tags, group_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  const rows = await d.select<{ id: number }[]>(
+    "INSERT INTO documents (filename, file_type, file_hash, size, tags, group_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
     [doc.filename, doc.file_type, doc.file_hash, doc.size, doc.tags, doc.group_id ?? null, new Date().toISOString().slice(0, 19).replace("T", " ")]
   );
-  const rows = await d.select<{ id: number }[]>("SELECT last_insert_rowid() AS id");
   return rows[0].id;
 }
 
@@ -398,16 +398,16 @@ export async function listGroups(): Promise<GroupRow[]> {
   }
 }
 
-/** 创建组（重名抛错），返回自增 id */
+/** 创建组（重名抛错），返回自增 id。
+ *  用 INSERT...RETURNING 原子取 id——禁止 last_insert_rowid()（连接池下跨连接返回 0，导致文档 group_id 写成 0 成孤儿，BUG-017 根因） */
 export async function createGroup(name: string): Promise<number> {
   const d = await getDb();
   const dup = await d.select<{ id: number }[]>("SELECT id FROM groups WHERE name = $1 LIMIT 1", [name]);
   if (dup.length > 0) throw new Error(`分组「${name}」已存在`);
-  await d.execute("INSERT INTO groups (name, created_at) VALUES ($1, $2)", [
-    name,
-    new Date().toISOString().slice(0, 19).replace("T", " "),
-  ]);
-  const rows = await d.select<{ id: number }[]>("SELECT last_insert_rowid() AS id");
+  const rows = await d.select<{ id: number }[]>(
+    "INSERT INTO groups (name, created_at) VALUES ($1, $2) RETURNING id",
+    [name, new Date().toISOString().slice(0, 19).replace("T", " ")]
+  );
   return rows[0].id;
 }
 
@@ -624,11 +624,10 @@ export async function createProfile(p: {
   const [{ c }] = await d.select<{ c: number }[]>("SELECT COUNT(*) AS c FROM ai_profiles");
   const isActive = c === 0 ? 1 : 0;
   const now = new Date().toISOString();
-  await d.execute(
-    "INSERT INTO ai_profiles (label, base_url, model, api_key, thinking, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)",
+  const [{ id }] = await d.select<{ id: number }[]>(
+    "INSERT INTO ai_profiles (label, base_url, model, api_key, thinking, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7) RETURNING id",
     [p.label, p.base_url, p.model, p.api_key, p.thinking ? 1 : 0, isActive, now]
   );
-  const [{ id }] = await d.select<{ id: number }[]>("SELECT last_insert_rowid() AS id");
   return id;
 }
 
