@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, inject } from "vue";
+import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import {
   dbStatus,
   listBillingRules,
@@ -10,8 +12,12 @@ import {
   deleteProfile,
   setActiveProfile,
   migrateLegacyConfig,
+  importBackupData,
+  isTauriRuntime,
   type AIProfile,
+  type BackupPayload,
 } from "../lib/db";
+import { emitDataChanged } from "../lib/bus";
 import { PRICE_TABLE, reloadPriceTable } from "../lib/ai";
 
 const toast = inject("toast") as (msg: string) => void;
@@ -63,6 +69,41 @@ async function loadProfiles() {
     profiles.value = [];
   } finally {
     loading.value = false;
+  }
+}
+
+// ---- 备份还原（数据存储卡片） ----
+const restoring = ref(false);
+
+async function restoreBackup() {
+  if (!isTauriRuntime()) {
+    toast("备份还原需在桌面应用内使用");
+    return;
+  }
+  const path = await open({
+    title: "选择 Goodidea 备份文件",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (!path) return;
+  try {
+    const content = await invoke<string>("read_backup", { path });
+    const data = JSON.parse(content) as BackupPayload;
+    if (!data || data.app !== "goodidea") {
+      toast("不是有效的 Goodidea 备份文件");
+      return;
+    }
+    restoring.value = true;
+    const r = await importBackupData(data);
+    if (!r) {
+      toast("还原失败（数据库不可用）");
+      return;
+    }
+    emitDataChanged(); // 文档库等面板即时刷新
+    toast(`已还原：${r.documents} 篇文档 / ${r.chunks} 块 / ${r.groups} 个分组 / ${r.rules} 条价格`);
+  } catch (err) {
+    toast(`还原失败：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    restoring.value = false;
   }
 }
 
@@ -317,6 +358,10 @@ async function priceSave() {
             <span>文档数：<b>{{ status.documents }}</b></span>
           </div>
         </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" @click="restoreBackup" :disabled="restoring">{{ restoring ? "还原中…" : "还原备份" }}</button>
+        <span style="font-size:12px;color:var(--text-faint);align-self:center">左侧「导出」可全量备份；还原会覆盖文档/分组/价格表（模型档案保留不动）</span>
       </div>
     </div>
 
