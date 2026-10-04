@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, inject } from "vue";
+import { ref, computed, onMounted, onUnmounted, inject } from "vue";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 import {
   loadAIConfig,
   streamGeneration,
@@ -25,6 +27,16 @@ const output = ref("");
 const generating = ref(false);
 const meta = ref<{ model: string; tokens: string; cost: string } | null>(null);
 const materialHit = ref(""); // 素材检索命中摘要（如「3 篇」），空=未命中/降级
+const outBox = ref<HTMLElement | null>(null); // 输出容器（复制时取渲染后干净文本）
+
+/** Markdown → 安全 HTML：与智能分析一致的渲染通道，流式内容实时转换 */
+const renderedOutput = computed(() => {
+  if (!output.value) return "";
+  // 模型偶发把列表符与话题符叠加（行首「-#xxx」）：去掉多余的横杠，保留话题符号
+  const cleaned = output.value.replace(/^-\s*#/gm, "#");
+  const html = DOMPurify.sanitize(marked.parse(cleaned, { async: false }) as string);
+  return html + (generating.value ? '<span class="cursor"></span>' : "");
+});
 
 // ---- 草稿（localStorage 存配置 + 输出 + 时间） ----
 const DRAFT_KEY = "goodidea.studio.draft.v1";
@@ -179,7 +191,9 @@ async function copyText() {
     toast("还没有生成内容");
     return;
   }
-  await navigator.clipboard.writeText(output.value);
+  // 复制渲染后的干净文本（无 Markdown 符号），与用户看到的一致
+  const text = outBox.value?.innerText ?? output.value;
+  await navigator.clipboard.writeText(text);
   toast("已复制到剪贴板");
 }
 
@@ -276,7 +290,7 @@ function copyShots() {
       <div class="panel-head"><span class="ph-t">输出</span><span class="ph-h">流式渲染 · 实时消耗</span></div>
       <div class="out-area" :class="{ empty: !output && !generating }">
         <template v-if="output || generating">
-          <div class="out-line" style="white-space:pre-wrap">{{ output }}<span v-if="generating" class="cursor"></span></div>
+          <div ref="outBox" class="out-line md-render" v-html="renderedOutput"></div>
         </template>
         <template v-else>
           <div style="color:var(--text-faint);padding:18px 0;text-align:center">配置模型后点击「开始生成」，内容将流式出现</div>
