@@ -204,8 +204,9 @@
 - **所属模块**：备份还原（src-tauri/src/lib.rs import_backup + src/lib/db.ts exportBackupData）
 - **症状**：用户还原备份后文档库「分组」面板显示 0 个组，「未分组」只剩 25 篇，其余 62 篇在列表、统计、分析中全部「消失」；库内 `documents.group_id` 指向已不存在的分组 id（1814/1815/1817/1818/650），groups 表为空。删除分组行为本身正常（deleteGroup 先置 NULL 再删组，自引入起正确）。
 - **根因**：`import_backup` 重建分组时执行 `INSERT INTO groups (name, created_at)`——**不插入备份中的原始 id**，SQLite 按自增序列重新分配新 id；而 documents 插入用的是备份里的**原始 group_id**。旧库 group_id 是 1000+ 的大 id，重建后 groups 新 id 从 1（或自增序列末值）起，两者永不对应 → 已分组文档全部成为孤儿（LEFT JOIN 不显示、COUNT(group_id IS NULL) 不计入）→ 分组 0 个 + 未分组只剩备份时本来就未分组的文档。根源是备份格式 v1 的 groups 未携带 id，还原时 id 语义丢失。
-- **解决**：① 立即修复存量数据——`UPDATE documents SET group_id=NULL WHERE group_id NOT IN (SELECT id FROM groups)`，62 篇孤儿归回未分组（文档未删，可逆）；② 备份格式升 v2——导出 `groups` 携带 `id`，`BackupGroup.id: Option<i64>` 兼容旧备份；还原时新备份（全部带 id）按原始 id 插 groups、documents 原样带 group_id，归属完全一致；旧备份（无 id）组按自增重建、文档 group_id 一律归 NULL（宁可见全不隐身，杜绝孤儿）。
-- **预防**：① 备份还原必须保留外键引用语义（groups.id → documents.group_id），重建时不能丢弃原始 id；② 涉及引用完整性重建的导入逻辑，还原后必须自查 `documents.group_id NOT IN (SELECT id FROM groups)` 是否为 0；③ 备份格式变更需向前兼容（Option 字段 + version 标记），旧备份走降级路径而不是报错。代码注释已标注（lib.rs import_backup、db.ts exportBackupData）。
+- **解决**：① 立即修复存量数据——`UPDATE documents SET group_id=NULL WHERE group_id NOT IN (SELECT id FROM groups)`，62 篇孤儿归回未分组（文档未删，可逆）；② 备份格式升 v2——导出 `groups` 携带 `id`，`BackupGroup.id: Option<i64>` 兼容旧备份；还原时新备份（全部带 id）按原始 id 插 groups、documents 原样带 group_id，归属完全一致；旧备份（无 id）组按自增重建、文档 group_id 一律归 NULL（宁可见全不隐身，杜绝孤儿）；③ 还原事务末尾加**兜底清理**——`UPDATE documents SET group_id=NULL WHERE group_id NOT IN (SELECT id FROM groups)`，任何备份格式/历史脏数据还原后孤儿必为 0（二次防御，@afaebad）。
+- **预防**：① 备份还原必须保留外键引用语义（groups.id → documents.group_id），重建时不能丢弃原始 id；② 涉及引用完整性重建的导入逻辑，还原后必须自查 `documents.group_id NOT IN (SELECT id FROM groups)` 是否为 0——已固化为还原事务内的兜底 UPDATE；③ 备份格式变更需向前兼容（Option 字段 + version 标记），旧备份走降级路径而不是报错。代码注释已标注（lib.rs import_backup、db.ts exportBackupData）。
+- **复现记录**：2026-10-04 用户再次还原旧版本备份后 74 篇文档 group_id 被写为 0（非法值）再次隐身；数据层已二次修复归位，代码层兜底清理保证还原后永不产生孤儿（@afaebad）。
 
 ## 记录约定
 
