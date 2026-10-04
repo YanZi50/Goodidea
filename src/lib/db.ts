@@ -496,3 +496,165 @@ export async function migrateLegacyConfig(): Promise<void> {
     console.error("[db] migrateLegacyConfig failed", err);
   }
 }
+
+// ---- 生成/分析历史（histories，v5）：回看 + 一键复用 ----
+export interface HistoryRow {
+  id: number;
+  kind: string; // generation / analysis
+  title: string;
+  prompt: string;
+  output: string;
+  meta: string | null;
+  created_at: string;
+}
+
+/** 写入一条历史；kind: "generation" | "analysis" */
+export async function recordHistory(p: { kind: string; title: string; prompt: string; output: string; meta?: string }): Promise<void> {
+  if (!isTauriRuntime()) return;
+  try {
+    const d = await getDb();
+    await d.execute(
+      "INSERT INTO histories (kind, title, prompt, output, meta, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+      [p.kind, p.title, p.prompt, p.output, p.meta ?? null, new Date().toISOString()]
+    );
+  } catch (err) {
+    console.error("[db] recordHistory failed", err);
+  }
+}
+
+/** 最近历史（默认 20 条，按时间倒序） */
+export async function listHistories(limit = 20, kind?: string): Promise<HistoryRow[] | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const d = await getDb();
+    const rows = kind
+      ? await d.select<HistoryRow[]>(
+          "SELECT id, kind, title, prompt, output, meta, created_at FROM histories WHERE kind = $1 ORDER BY id DESC LIMIT $2",
+          [kind, limit]
+        )
+      : await d.select<HistoryRow[]>(
+          "SELECT id, kind, title, prompt, output, meta, created_at FROM histories ORDER BY id DESC LIMIT $1",
+          [limit]
+        );
+    return rows;
+  } catch (err) {
+    console.error("[db] listHistories failed", err);
+    return null;
+  }
+}
+
+/** 删除单条历史 */
+export async function deleteHistory(id: number): Promise<void> {
+  if (!isTauriRuntime()) return;
+  try {
+    const d = await getDb();
+    await d.execute("DELETE FROM histories WHERE id = $1", [id]);
+  } catch (err) {
+    console.error("[db] deleteHistory failed", err);
+  }
+}
+
+/** 清空某类历史（或全部） */
+export async function clearHistories(kind?: string): Promise<void> {
+  if (!isTauriRuntime()) return;
+  try {
+    const d = await getDb();
+    await d.execute(kind ? "DELETE FROM histories WHERE kind = $1" : "DELETE FROM histories", kind ? [kind] : []);
+  } catch (err) {
+    console.error("[db] clearHistories failed", err);
+  }
+}
+
+// ---- 知识库备份导出（JSON 全量，供还原） ----
+export interface BackupPayload {
+  app: string;
+  version: number;
+  exportedAt: string;
+  documents: { id: number; filename: string; file_type: string; file_hash: string | null; size: number | null; group_id: number | null; created_at: string }[];
+  chunks: { doc_id: number; seq: number; content: string; token_count: number | null }[];
+  groups: { name: string; created_at: string }[];
+  billing_rules: { model: string; input_price: number; output_price: number; updated_at: string }[];
+  ai_profiles: { label: string; base_url: string; model: string; api_key: string; thinking: number; is_active: number; created_at: string; updated_at: string }[];
+}
+
+/** 全量导出（不含 histories，历史属过程数据） */
+export async function exportBackupData(): Promise<BackupPayload | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const d = await getDb();
+    const [documents, chunks, groups, billing_rules, ai_profiles] = await Promise.all([
+      d.select<BackupPayload["documents"]>("SELECT id, filename, file_type, file_hash, size, group_id, created_at FROM documents ORDER BY id"),
+      d.select<BackupPayload["chunks"]>("SELECT doc_id, seq, content, token_count FROM chunks ORDER BY doc_id, seq"),
+      d.select<BackupPayload["groups"]>("SELECT name, created_at FROM groups ORDER BY id"),
+      d.select<BackupPayload["billing_rules"]>("SELECT model, input_price, output_price, updated_at FROM billing_rules"),
+      d.select<BackupPayload["ai_profiles"]>("SELECT label, base_url, model, api_key, thinking, is_active, created_at, updated_at FROM ai_profiles"),
+    ]);
+    return {
+      app: "goodidea",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      documents,
+      chunks,
+      groups,
+      billing_rules,
+      ai_profiles,
+    };
+  } catch (err) {
+    console.error("[db] exportBackupData failed", err);
+    return null;
+  }
+}
+
+/** 还原备份：重建文档/分块/分组（覆盖），价格表覆盖；模型档案保留现有（密钥敏感不覆盖）。返回导入计数 */
+export async function importBackupData(backup: BackupPayload): Promise<{ documents: number; chunks: number; groups: number; rules: number } | null> {
+  if (!isTauriRuntime()) return null;
+  if (!backup || backup.app !== "goodidea") return null;
+  try {
+    const d = await getDb();
+    await d.execute("BEGIN");
+    await d.execute("DELETE FROM chunks");
+    await d.execute("DELETE FROM documents");
+    await d.execute("DELETE FROM groups");
+    const oldToNew = new Map<number, number>();
+    for (const g of backup.groups) {
+      await d.execute("INSERT INTO groups (name, created_at) VALUES ($1, $2)", [g.name, g.created_at]);
+    }
+    for (const doc of backup.documents) {
+      await d.execute(
+        "INSERT INTO documents (filename, file_type, file_hash, size, group_id, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+        [doc.filename, doc.file_type, doc.file_hash, doc.size, doc.group_id, doc.created_at]
+      );
+      const [{ lastId }] = await d.select<{ lastId: number }[]>("SELECT last_insert_rowid() AS lastId");
+      oldToNew.set(doc.id, lastId);
+    }
+    // 用备份数组索引还原 doc_id 映射（备份 chunk.doc_id = 备份库中 documents 的 id，按顺序对应数组下标+1）
+    for (const c of backup.chunks) {
+      const newDocId = oldToNew.get(c.doc_id);
+      if (newDocId === undefined) continue; // 备份缺文档（理论上不会）
+      await d.execute("INSERT INTO chunks (doc_id, seq, content, token_count) VALUES ($1, $2, $3, $4)", [newDocId, c.seq, c.content, c.token_count]);
+    }
+    for (const r of backup.billing_rules) {
+      await d.execute(
+        "INSERT INTO billing_rules (model, input_price, output_price, updated_at) VALUES ($1, $2, $3, $4) " +
+          "ON CONFLICT(model) DO UPDATE SET input_price = $2, output_price = $3, updated_at = $4",
+        [r.model, r.input_price, r.output_price, r.updated_at]
+      );
+    }
+    await d.execute("COMMIT");
+    return {
+      documents: backup.documents.length,
+      chunks: backup.chunks.length,
+      groups: backup.groups.length,
+      rules: backup.billing_rules.length,
+    };
+  } catch (err) {
+    try {
+      const d = await getDb();
+      await d.execute("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    console.error("[db] importBackupData failed", err);
+    return null;
+  }
+}
