@@ -279,6 +279,22 @@ export async function listAllChunkContent(limit = 60, docIds?: number[]): Promis
   }
 }
 
+/** 全量分块（含文档名归属），供查重/素材检索等需要溯源的能力使用 */
+export async function listChunksWithDoc(limit = 3000): Promise<{ doc: string; content: string }[] | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const d = await getDb();
+    const rows = await d.select<{ doc: string; content: string }[]>(
+      "SELECT d.filename AS doc, c.content AS content FROM chunks c JOIN documents d ON d.id = c.doc_id ORDER BY c.doc_id, c.seq LIMIT $1",
+      [limit]
+    );
+    return rows;
+  } catch (err) {
+    console.error("[db] listChunksWithDoc failed", err);
+    return null;
+  }
+}
+
 /** 素材检索：按关键词匹配文档文件名或分块内容，返回命中文档的分块（生成工作台关联素材用） */
 export async function searchMaterialChunks(
   keywords: string[],
