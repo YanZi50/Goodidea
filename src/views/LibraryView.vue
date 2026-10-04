@@ -508,9 +508,9 @@ function onDrop(e: DragEvent) {
       <button class="chip" :class="{ on: groupFilter === 'all' }" @click="groupFilter = 'all'">全部 {{ docs.length }}</button>
       <button class="chip" :class="{ on: groupFilter === 'none' }" @click="groupFilter = 'none'">未分组 {{ ungroupedCount }}</button>
       <span v-for="g in groups" :key="g.id" class="g-chip-wrap">
-        <!-- 确认删除态：chip 本体变红字（原位不挤布局、不溢出裁剪）；再次点击即删除 -->
-        <button class="chip g-chip" :class="{ on: groupFilter === g.id, deleting: groupDelId === g.id }" @click="groupDelId === g.id ? removeGroup(g) : (groupFilter = g.id)">{{ groupDelId === g.id ? "确认删除？" : `${g.name} ${g.doc_count}` }}</button>
-        <button v-if="groupDelId !== g.id" class="g-del" title="删除分组（组内文档移回未分组）" @click.stop="removeGroup(g)">×</button>
+        <!-- chip 本体始终显示组名+数量（宽度不变零跳动）；删除入口为右上角小 pill，确认态原位变红底白字 -->
+        <button class="chip g-chip" :class="{ on: groupFilter === g.id }" @click="groupFilter = g.id">{{ g.name }} {{ g.doc_count }}</button>
+        <button class="g-del" :class="{ confirm: groupDelId === g.id }" :title="groupDelId === g.id ? '再次点击确认删除（组内文档移回未分组）' : '删除分组（组内文档移回未分组）'" @click.stop="removeGroup(g)">{{ groupDelId === g.id ? "确认" : "删除" }}</button>
       </span>
       <template v-if="creatingGroup">
         <input class="input g-new-input" v-model="newGroupName" placeholder="分组名称…" @keydown.enter="createGroupSubmit" />
@@ -678,17 +678,16 @@ function onDrop(e: DragEvent) {
 }
 .chip.on { background: var(--accent); color: #0b0e13; border-color: var(--accent); }
 .g-chip-wrap { position: relative; display: inline-flex; }
+/* 删除入口：chip 右上角小 pill「删除」；确认态原位变红底白字「确认」（absolute 不占布局，零跳动） */
 .g-del {
-  position: absolute; right: -5px; top: -7px; width: 16px; height: 16px; line-height: 14px;
-  border-radius: 50%; border: 1px solid var(--border); background: var(--surface-1);
-  color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0; text-align: center;
+  position: absolute; right: 0; top: -8px; height: 17px; line-height: 15px;
+  border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-muted); font-size: 10.5px; padding: 0 6px; cursor: pointer;
+  text-align: center; white-space: nowrap; z-index: 2;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
-/* 删除分组二次确认态：chip 本体原位变红字（不挤布局、不被滚动容器裁切） */
-.chip.deleting {
-  background: rgba(244, 67, 54, 0.12); border-color: var(--red);
-  color: var(--red); font-weight: 700;
-}
+.g-del.confirm { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 700; }
+.g-del.confirm:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
 .g-new-input { width: 140px; padding: 5px 10px; }
 .paste-panel {
   border: 1px solid rgba(232, 179, 106, 0.3); border-radius: 10px;

@@ -41,6 +41,8 @@ struct BackupChunk {
 }
 #[derive(Deserialize)]
 struct BackupGroup {
+    /// 新备份带 id；旧备份（无 id 字段）为 None → 还原时文档 group_id 归 NULL，防孤儿
+    id: Option<i64>,
     name: String,
     created_at: String,
 }
@@ -83,12 +85,23 @@ fn import_backup(app: tauri::AppHandle, json: String) -> Result<String, String> 
         conn.execute("DELETE FROM chunks", []).map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM documents", []).map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM groups", []).map_err(|e| e.to_string())?;
+        // 新备份（v2 起）：groups 带原始 id，文档 group_id 原样还原，分组归属完全一致；
+        // 旧备份（无 id 字段）：组按自增重建、文档 group_id 归 NULL——宁可见全不隐身，杜绝孤儿引用（BUG-017）
+        let has_group_ids = !payload.groups.is_empty() && payload.groups.iter().all(|g| g.id.is_some());
         {
-            let mut st = conn
-                .prepare("INSERT INTO groups (name, created_at) VALUES (?1, ?2)")
-                .map_err(|e| e.to_string())?;
+            let mut st = if has_group_ids {
+                conn.prepare("INSERT INTO groups (id, name, created_at) VALUES (?1, ?2, ?3)")
+                    .map_err(|e| e.to_string())?
+            } else {
+                conn.prepare("INSERT INTO groups (name, created_at) VALUES (?1, ?2)")
+                    .map_err(|e| e.to_string())?
+            };
             for g in &payload.groups {
-                st.execute(params![g.name, g.created_at]).map_err(|e| e.to_string())?;
+                if has_group_ids {
+                    st.execute(params![g.id.unwrap(), g.name, g.created_at]).map_err(|e| e.to_string())?;
+                } else {
+                    st.execute(params![g.name, g.created_at]).map_err(|e| e.to_string())?;
+                }
             }
         }
         {
@@ -96,7 +109,8 @@ fn import_backup(app: tauri::AppHandle, json: String) -> Result<String, String> 
                 .prepare("INSERT INTO documents (id, filename, file_type, file_hash, size, group_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
                 .map_err(|e| e.to_string())?;
             for d in &payload.documents {
-                st.execute(params![d.id, d.filename, d.file_type, d.file_hash, d.size, d.group_id, d.created_at])
+                let gid = if has_group_ids { d.group_id } else { None };
+                st.execute(params![d.id, d.filename, d.file_type, d.file_hash, d.size, gid, d.created_at])
                     .map_err(|e| e.to_string())?;
             }
         }

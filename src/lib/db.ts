@@ -794,7 +794,7 @@ export interface BackupPayload {
   exportedAt: string;
   documents: { id: number; filename: string; file_type: string; file_hash: string | null; size: number | null; group_id: number | null; created_at: string }[];
   chunks: { doc_id: number; seq: number; content: string; token_count: number | null }[];
-  groups: { name: string; created_at: string }[];
+  groups: { id: number | null; name: string; created_at: string }[];
   billing_rules: { model: string; input_price: number; output_price: number; updated_at: string }[];
   ai_profiles: { label: string; base_url: string; model: string; api_key: string; thinking: number; is_active: number; created_at: string; updated_at: string }[];
 }
@@ -807,13 +807,13 @@ export async function exportBackupData(): Promise<BackupPayload | null> {
     const [documents, chunks, groups, billing_rules, ai_profiles] = await Promise.all([
       d.select<BackupPayload["documents"]>("SELECT id, filename, file_type, file_hash, size, group_id, created_at FROM documents ORDER BY id"),
       d.select<BackupPayload["chunks"]>("SELECT doc_id, seq, content, token_count FROM chunks ORDER BY doc_id, seq"),
-      d.select<BackupPayload["groups"]>("SELECT name, created_at FROM groups ORDER BY id"),
+      d.select<BackupPayload["groups"]>("SELECT id, name, created_at FROM groups ORDER BY id"),
       d.select<BackupPayload["billing_rules"]>("SELECT model, input_price, output_price, updated_at FROM billing_rules"),
       d.select<BackupPayload["ai_profiles"]>("SELECT label, base_url, model, api_key, thinking, is_active, created_at, updated_at FROM ai_profiles"),
     ]);
     return {
       app: "goodidea",
-      version: 1,
+      version: 2, // v2 起 groups 带 id，还原分组归属一致（BUG-017 修复）；v1 旧备份还原时文档归未分组
       exportedAt: new Date().toISOString(),
       documents,
       chunks,
