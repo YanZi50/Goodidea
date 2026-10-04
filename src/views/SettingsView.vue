@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, inject } from "vue";
+import { ref, onMounted, onUnmounted, inject } from "vue";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -17,7 +17,7 @@ import {
   type AIProfile,
   type BackupPayload,
 } from "../lib/db";
-import { emitDataChanged } from "../lib/bus";
+import { emitDataChanged, onModelSwitched } from "../lib/bus";
 import { PRICE_TABLE, reloadPriceTable } from "../lib/ai";
 
 const toast = inject("toast") as (msg: string) => void;
@@ -35,6 +35,15 @@ onMounted(async () => {
   checking.value = false;
   await migrateLegacyConfig(); // 旧单配置首次升级为档案
   await loadProfiles();
+  offModelSwitched = onModelSwitched(() => {
+    // 顶栏切换模型后即时刷新，无需手动刷新
+    void loadProfiles();
+  });
+});
+
+let offModelSwitched: (() => void) | null = null;
+onUnmounted(() => {
+  offModelSwitched?.();
 });
 
 // ---- 模型档案 ----
@@ -87,7 +96,7 @@ async function restoreBackup() {
   if (!path) return;
   try {
     const content = await invoke<string>("read_backup", { path });
-    const data = JSON.parse(content) as BackupPayload;
+    const data = JSON.parse(content.replace(/^\uFEFF/, "")) as BackupPayload; // 容错 BOM
     if (!data || data.app !== "goodidea") {
       toast("不是有效的 Goodidea 备份文件");
       return;

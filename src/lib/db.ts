@@ -615,23 +615,19 @@ export async function importBackupData(backup: BackupPayload): Promise<{ documen
     await d.execute("DELETE FROM chunks");
     await d.execute("DELETE FROM documents");
     await d.execute("DELETE FROM groups");
-    const oldToNew = new Map<number, number>();
     for (const g of backup.groups) {
       await d.execute("INSERT INTO groups (name, created_at) VALUES ($1, $2)", [g.name, g.created_at]);
     }
+    // 显式 id 插入：AUTOINCREMENT 允许显式指定主键，chunks.doc_id 直接沿用备份 id，
+    // 规避 tauri-plugin-sql 连接池下 last_insert_rowid() 跨连接取错的风险（BUG-014）
     for (const doc of backup.documents) {
       await d.execute(
-        "INSERT INTO documents (filename, file_type, file_hash, size, group_id, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
-        [doc.filename, doc.file_type, doc.file_hash, doc.size, doc.group_id, doc.created_at]
+        "INSERT INTO documents (id, filename, file_type, file_hash, size, group_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        [doc.id, doc.filename, doc.file_type, doc.file_hash, doc.size, doc.group_id, doc.created_at]
       );
-      const [{ lastId }] = await d.select<{ lastId: number }[]>("SELECT last_insert_rowid() AS lastId");
-      oldToNew.set(doc.id, lastId);
     }
-    // 用备份数组索引还原 doc_id 映射（备份 chunk.doc_id = 备份库中 documents 的 id，按顺序对应数组下标+1）
     for (const c of backup.chunks) {
-      const newDocId = oldToNew.get(c.doc_id);
-      if (newDocId === undefined) continue; // 备份缺文档（理论上不会）
-      await d.execute("INSERT INTO chunks (doc_id, seq, content, token_count) VALUES ($1, $2, $3, $4)", [newDocId, c.seq, c.content, c.token_count]);
+      await d.execute("INSERT INTO chunks (doc_id, seq, content, token_count) VALUES ($1, $2, $3, $4)", [c.doc_id, c.seq, c.content, c.token_count]);
     }
     for (const r of backup.billing_rules) {
       await d.execute(
