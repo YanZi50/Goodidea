@@ -175,3 +175,10 @@
 - **真实连通判定**：设置页每份模型档案新增「测试」按钮——发一条最小请求（≤5 token）验证 API 真实联通，成功显示延迟毫秒、失败显示具体错误（认证/网络/模型名）；新增模型档案说明文案同步提示。此前「绿色」只代表已配置档案，可能误导（@38e941d @d185431）
 - **顶栏状态点提示**：Topbar 绿点悬浮提示「绿色=已配置档案（未验证连通）；设置页可点测试验证」（@d185431）
 - 验证：vue-tsc + vite build 全绿（399 模块）；说明文案截图确认；测试逻辑代码审查（复用 AI SDK 同一通道），真机测试效果待确认（@d185431）
+
+### Fixed（AI 请求 CORS 拦截根治，BUG-015）
+- **AI 请求改走 Rust 网络栈**：生成/分析/测试连接在 Tauri 运行时统一用 tauri-plugin-http（reqwest，无浏览器 CORS 概念），替代此前 WebView2 原生 fetch——中转类 OpenAI 兼容端点（如 aigd.top）响应不带 `Access-Control-Allow-Origin` 头时不再报 `Failed to fetch`；DeepSeek/火山官方端点不受影响（@2d37721）
+- **capabilities 放行任意端点**：http:default allow 放宽为 `https://**` + `http://**`（含局域网自建 OpenAI 兼容端点），不再逐域登记（@2d37721）
+- **web 预览限制说明**：浏览器预览无插件仍受 CORS 约束，接不通的端点请在桌面应用内使用（@2d37721）
+- 验证：vue-tsc + vite build 全绿（399 模块）；cargo check Finished；本机实测 aigd.top `/v1/models` 与 `/v1/chat/completions` 直连均 200（key 有效、gpt-5.5 存在、响应无 ACAO 头=此前拦截源）；真机测试待确认（@待回填）
+- **已知外部事项（非应用缺陷）**：实测 aigd.top 当前返回 `403 insufficient balance`——该中转账号余额不足，需充值后才能使用；充值后请重新点「测试」验证

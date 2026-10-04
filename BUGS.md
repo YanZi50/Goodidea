@@ -164,7 +164,7 @@
 ## BUG-014：备份还原失败——tauri-plugin-sql 连接池下 last_insert_rowid() 跨连接取错
 
 - **日期**：2026-10-04
-- **关联 commit**：@47a0c9d（引入）、@18d7262（显式 id 缓解）、@待回填（根治）
+- **关联 commit**：@47a0c9d（引入）、@18d7262（显式 id 缓解）、@2d37721（根治）
 - **所属模块**：知识库备份还原（src/lib/db.ts importBackupData + src-tauri/src/lib.rs import_backup）
 - **症状**：真机「还原备份」失败（导入计数异常或 chunks.doc_id 指向不存在的文档，文档可导入但分块错位；后续版本表现为 toast「还原失败（数据库不可用）」且库内无数据写入）。
 - **根因**：两层问题。① tauri-plugin-sql 内部为连接池（r2d2/sqlx），`d.execute(INSERT)` 与随后 `SELECT last_insert_rowid()` 可能命中**不同连接**，返回的不是本次 INSERT 的自增 id（跨连接读不到/读错）；② 连接池下 `BEGIN / DELETE / INSERT / COMMIT` 各语句同样可能落在不同连接，事务语义完全失效（BEGIN 连接 A 上开了空事务，写入在连接 B/C 上 autocommit），前端无法保证原子还原；且原实现对错误只 console.error 后返回 null，界面误报「数据库不可用」，看不到真实 SQLite 错误。
@@ -176,7 +176,7 @@
 ## BUG-015：AI 请求被 WebView2 CORS 拦截——中转类兼容端点（无 ACAO 头）一律 Failed to fetch
 
 - **日期**：2026-10-04
-- **关联 commit**：@待回填
+- **关联 commit**：@2d37721
 - **所属模块**：AI 请求通道（src/lib/ai.ts providerFor + src-tauri/capabilities/default.json）
 - **症状**：设置页「测试」与生成/分析均报 `Failed to fetch`，但 DeepSeek 官方档案正常；用同一 key 在本机 python 直连该端点（aigd.top，OpenAI 兼容中转）HTTP 200 正常返回，应用内却必失败。
 - **根因**：AI 请求此前走 WebView2 **原生 fetch**，受浏览器 CORS 模型约束——跨域请求要求响应携带 `Access-Control-Allow-Origin`。DeepSeek/火山官方端点带 ACAO 放行；aigd.top 这类中转站响应**无 ACAO 头** → WebView 拦截 → 报 Failed to fetch（网络层错误，掩盖了真实 HTTP 状态）。capabilities 的 http:default 白名单此前只放行热点域名，且前端热点模块已走 Rust 通道（hotlist.ts 用 plugin-http fetch），AI 通道未接入，两端行为不一致。
