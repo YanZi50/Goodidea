@@ -207,6 +207,9 @@
 - **解决**：① 立即修复存量数据——`UPDATE documents SET group_id=NULL WHERE group_id NOT IN (SELECT id FROM groups)`，62 篇孤儿归回未分组（文档未删，可逆）；② 备份格式升 v2——导出 `groups` 携带 `id`，`BackupGroup.id: Option<i64>` 兼容旧备份；还原时新备份（全部带 id）按原始 id 插 groups、documents 原样带 group_id，归属完全一致；旧备份（无 id）组按自增重建、文档 group_id 一律归 NULL（宁可见全不隐身，杜绝孤儿）；③ 还原事务末尾加**兜底清理**——`UPDATE documents SET group_id=NULL WHERE group_id NOT IN (SELECT id FROM groups)`，任何备份格式/历史脏数据还原后孤儿必为 0（二次防御，@afaebad）。
 - **预防**：① 备份还原必须保留外键引用语义（groups.id → documents.group_id），重建时不能丢弃原始 id；② 涉及引用完整性重建的导入逻辑，还原后必须自查 `documents.group_id NOT IN (SELECT id FROM groups)` 是否为 0——已固化为还原事务内的兜底 UPDATE；③ 备份格式变更需向前兼容（Option 字段 + version 标记），旧备份走降级路径而不是报错。代码注释已标注（lib.rs import_backup、db.ts exportBackupData）。
 - **复现记录**：2026-10-04 用户再次还原旧版本备份后 74 篇文档 group_id 被写为 0（非法值）再次隐身；数据层已二次修复归位，代码层兜底清理保证还原后永不产生孤儿（@afaebad）。
+- **真根因（@afcc8ac）**：非还原路径也能写坏 group_id——`createGroup` 用 `SELECT last_insert_rowid()` 取新组 id，tauri-plugin-sql 连接池下 INSERT 与 SELECT 可能落在**不同连接**，跨连接 last_insert_rowid 返回 0 → 智能分类 `setDocumentsGroup(ids, 0)` 把文档 group_id 写成 0 → 删除分组后残留孤儿（用户「分类→删组」复现 62 篇隐身）。同款雷在 `insertDocument`、`addProfile`（同样 last_insert_rowid 取 id，跨连接会返回错 id）。
+- **根治**：三个函数全部改为 `INSERT ... RETURNING id`（同语句原子返回真实 id，SQLite 3.35+ / bundled 均支持）——连接池下不再依赖连接级 last_insert_rowid 状态。
+- **数据复修**：62 篇 group_id=0 已归回未分组，87 篇全可见（未删文档）。
 
 ## 记录约定
 
