@@ -40,6 +40,7 @@ const editGroupId = ref<number | "">(""); // "" = 未分组（select 原生空�
 const selected = ref<Set<number>>(new Set());
 const batchGroup = ref<number | "">("");
 const targetGroup = ref<number | "">(""); // 导入时归属组
+const groupDelId = ref<number | null>(null); // 删除分组二次确认态
 
 // ---- 粘贴文本入库 ----
 const pasteOpen = ref(false);
@@ -202,8 +203,12 @@ async function createGroupSubmit() {
 }
 
 async function removeGroup(g: GroupRow) {
-  const confirmed = window.confirm(`删除分组「${g.name}」？组内 ${g.doc_count} 篇文档将移回「未分组」，文档本身不删除。`);
-  if (!confirmed) return;
+  if (groupDelId.value !== g.id) {
+    groupDelId.value = g.id;
+    setTimeout(() => (groupDelId.value = null), 3000);
+    return;
+  }
+  groupDelId.value = null;
   try {
     await deleteGroup(g.id);
     toast(`已删除分组「${g.name}」`);
@@ -504,7 +509,7 @@ function onDrop(e: DragEvent) {
       <button class="chip" :class="{ on: groupFilter === 'none' }" @click="groupFilter = 'none'">未分组 {{ ungroupedCount }}</button>
       <span v-for="g in groups" :key="g.id" class="g-chip-wrap">
         <button class="chip g-chip" :class="{ on: groupFilter === g.id }" @click="groupFilter = g.id">{{ g.name }} {{ g.doc_count }}</button>
-        <button class="g-del" title="删除分组（组内文档移回未分组）" @click.stop="removeGroup(g)">×</button>
+        <button class="g-del" :class="{ confirm: groupDelId === g.id }" :title="groupDelId === g.id ? '再次点击确认删除（组内文档移回未分组）' : '删除分组（组内文档移回未分组）'" @click.stop="removeGroup(g)">{{ groupDelId === g.id ? "确认删？" : "×" }}</button>
       </span>
       <template v-if="creatingGroup">
         <input class="input g-new-input" v-model="newGroupName" placeholder="分组名称…" @keydown.enter="createGroupSubmit" />
@@ -675,6 +680,12 @@ function onDrop(e: DragEvent) {
   color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0; text-align: center;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+/* 删除分组二次确认态：变红 pill 显示「确认删？」 */
+.g-del.confirm {
+  width: auto; min-width: 52px; padding: 0 6px; border-radius: 999px;
+  background: var(--danger); color: #fff; border-color: var(--danger);
+  line-height: 15px; font-size: 10.5px; top: -7px; right: -26px; white-space: nowrap;
+}
 .g-new-input { width: 140px; padding: 5px 10px; }
 .paste-panel {
   border: 1px solid rgba(232, 179, 106, 0.3); border-radius: 10px;
@@ -722,4 +733,13 @@ tr.sel td { background: rgba(232, 179, 106, 0.06); }
   font-size: 13px; line-height: 1; padding: 0 2px;
 }
 .classify-x:hover { color: var(--red); }
+/* 列表 8 行限高 + 表头冻结（滚动时表头钉在顶部） */
+.scroll-limit { max-height: 402px; }
+.scroll-limit thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface-1);
+  box-shadow: 0 1px 0 var(--border);
+}
+/* 智能分类确认面板限高滚动：不撑爆页面，滚动查看 */
+.classify-panel { max-height: 360px; overflow-y: auto; }
 </style>
