@@ -361,3 +361,138 @@ export async function upsertBillingRule(model: string, inputPrice: number, outpu
     [model, inputPrice, outputPrice, new Date().toISOString()]
   );
 }
+
+// ---- AI 模型档案（ai_profiles，v4）：多模型接入 + 一键切换 ----
+export interface AIProfile {
+  id: number;
+  label: string;
+  base_url: string;
+  model: string;
+  api_key: string;
+  thinking: number; // 0/1
+  is_active: number; // 0/1
+  created_at: string;
+  updated_at: string;
+}
+
+/** 读取全部模型档案；web 预览返回 null */
+export async function listProfiles(): Promise<AIProfile[] | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const d = await getDb();
+    return await d.select<AIProfile[]>(
+      "SELECT id, label, base_url, model, api_key, thinking, is_active, created_at, updated_at FROM ai_profiles ORDER BY is_active DESC, updated_at DESC"
+    );
+  } catch (err) {
+    console.error("[db] listProfiles failed", err);
+    return null;
+  }
+}
+
+/** 新增档案（若库中无任何档案则自动设为当前） */
+export async function createProfile(p: {
+  label: string;
+  base_url: string;
+  model: string;
+  api_key: string;
+  thinking: boolean;
+}): Promise<number | null> {
+  if (!isTauriRuntime()) return null;
+  const d = await getDb();
+  const [{ c }] = await d.select<{ c: number }[]>("SELECT COUNT(*) AS c FROM ai_profiles");
+  const isActive = c === 0 ? 1 : 0;
+  const now = new Date().toISOString();
+  await d.execute(
+    "INSERT INTO ai_profiles (label, base_url, model, api_key, thinking, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)",
+    [p.label, p.base_url, p.model, p.api_key, p.thinking ? 1 : 0, isActive, now]
+  );
+  const [{ id }] = await d.select<{ id: number }[]>("SELECT last_insert_rowid() AS id");
+  return id;
+}
+
+/** 更新档案字段 */
+export async function updateProfile(
+  id: number,
+  p: { label?: string; base_url?: string; model?: string; api_key?: string; thinking?: boolean }
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  const d = await getDb();
+  const sets: string[] = [];
+  const args: unknown[] = [];
+  const push = (col: string, v: unknown) => {
+    sets.push(`${col} = $${sets.length + 1}`);
+    args.push(v);
+  };
+  if (p.label !== undefined) push("label", p.label);
+  if (p.base_url !== undefined) push("base_url", p.base_url);
+  if (p.model !== undefined) push("model", p.model);
+  if (p.api_key !== undefined) push("api_key", p.api_key);
+  if (p.thinking !== undefined) push("thinking", p.thinking ? 1 : 0);
+  if (sets.length === 0) return;
+  sets.push(`updated_at = $${sets.length + 1}`);
+  args.push(new Date().toISOString());
+  args.push(id);
+  await d.execute(`UPDATE ai_profiles SET ${sets.join(", ")} WHERE id = $${args.length}`, args);
+}
+
+/** 删除档案；若删除的是当前模型，把剩余第一份（或空表）设为当前 */
+export async function deleteProfile(id: number): Promise<void> {
+  if (!isTauriRuntime()) return;
+  const d = await getDb();
+  const [{ wasActive }] = await d.select<{ wasActive: number }[]>(
+    "SELECT is_active AS wasActive FROM ai_profiles WHERE id = $1",
+    [id]
+  );
+  await d.execute("DELETE FROM ai_profiles WHERE id = $1", [id]);
+  if (wasActive === 1) {
+    const rows = await d.select<{ id: number }[]>("SELECT id FROM ai_profiles ORDER BY updated_at DESC LIMIT 1");
+    if (rows.length > 0) {
+      await d.execute("UPDATE ai_profiles SET is_active = 1, updated_at = $2 WHERE id = $1", [rows[0].id, new Date().toISOString()]);
+    }
+  }
+}
+
+/** 设为当前模型（同库内仅此一份 is_active=1） */
+export async function setActiveProfile(id: number): Promise<void> {
+  if (!isTauriRuntime()) return;
+  const d = await getDb();
+  await d.execute("UPDATE ai_profiles SET is_active = 0");
+  await d.execute("UPDATE ai_profiles SET is_active = 1, updated_at = $2 WHERE id = $1", [id, new Date().toISOString()]);
+}
+
+/** 读取当前模型档案；无档案返回 null */
+export async function getActiveProfile(): Promise<AIProfile | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const d = await getDb();
+    const rows = await d.select<AIProfile[]>(
+      "SELECT id, label, base_url, model, api_key, thinking, is_active, created_at, updated_at FROM ai_profiles WHERE is_active = 1 LIMIT 1"
+    );
+    return rows[0] ?? null;
+  } catch (err) {
+    console.error("[db] getActiveProfile failed", err);
+    return null;
+  }
+}
+
+/** 旧版 localStorage 单配置 → 一次性迁移为第一份档案（仅当 SQLite 无任何档案时执行） */
+export async function migrateLegacyConfig(): Promise<void> {
+  if (!isTauriRuntime()) return;
+  try {
+    const d = await getDb();
+    const [{ c }] = await d.select<{ c: number }[]>("SELECT COUNT(*) AS c FROM ai_profiles");
+    if (c > 0) return;
+    const raw = localStorage.getItem("goodidea.ai.config.v1");
+    if (!raw) return;
+    const old = JSON.parse(raw) as { label?: string; baseURL?: string; model?: string; apiKey?: string; thinking?: boolean };
+    if (!old.apiKey || !old.model) return;
+    const now = new Date().toISOString();
+    await d.execute(
+      "INSERT INTO ai_profiles (label, base_url, model, api_key, thinking, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1, $6, $6)",
+      [old.label?.trim() || "我的模型", old.baseURL || "", old.model, old.apiKey, old.thinking ? 1 : 0, now]
+    );
+    localStorage.removeItem("goodidea.ai.config.v1");
+  } catch (err) {
+    console.error("[db] migrateLegacyConfig failed", err);
+  }
+}
