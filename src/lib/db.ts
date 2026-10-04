@@ -279,6 +279,58 @@ export async function listAllChunkContent(limit = 60, docIds?: number[]): Promis
   }
 }
 
+/** 素材检索：按关键词匹配文档文件名或分块内容，返回命中文档的分块（生成工作台关联素材用） */
+export async function searchMaterialChunks(
+  keywords: string[],
+  chunkLimit = 24
+): Promise<{ docCount: number; chunks: { doc: string; content: string }[] }> {
+  if (!isTauriRuntime()) return { docCount: 0, chunks: [] };
+  try {
+    const d = await getDb();
+    const like = keywords.filter((k) => k.length > 0);
+    if (like.length === 0) return { docCount: 0, chunks: [] };
+    const or = like.map((_, i) => `content LIKE '%' || $${i + 1} || '%'`).join(" OR ");
+    const rows = await d.select<{ doc_id: number; filename: string; content: string }[]>(
+      `SELECT c.doc_id, doc.filename, c.content FROM chunks c
+       JOIN documents doc ON doc.id = c.doc_id
+       WHERE ${or}
+       ORDER BY c.doc_id, c.seq
+       LIMIT ${chunkLimit}`,
+      like
+    );
+    const seen = new Set<number>();
+    const chunks = rows.map((r) => {
+      seen.add(r.doc_id);
+      return { doc: r.filename, content: r.content };
+    });
+    // 文件名命中但无内容命中的文档也尽量覆盖：文件关键词匹配
+    const seenIds = [...seen];
+    const fnLike = like.map((_, i) => `filename LIKE '%' || $${i + 1} || '%'`).join(" OR ");
+    const inPh = seenIds.length > 0 ? seenIds.map((_, i) => `$${i + like.length + 1}`).join(",") : "0";
+    const fnRows = await d.select<{ id: number; filename: string }[]>(
+      `SELECT id, filename FROM documents WHERE ${fnLike} AND id NOT IN (${inPh}) LIMIT 8`,
+      [...like, ...seenIds]
+    );
+    let extra = 0;
+    for (const f of fnRows) {
+      if (extra >= 6) break;
+      const cs = await d.select<{ content: string }[]>(
+        "SELECT content FROM chunks WHERE doc_id = $1 ORDER BY seq LIMIT 3",
+        [f.id]
+      );
+      for (const c of cs) {
+        chunks.push({ doc: f.filename, content: c.content });
+        extra++;
+      }
+      seen.add(f.id);
+    }
+    return { docCount: seen.size, chunks };
+  } catch (err) {
+    console.error("[db] searchMaterialChunks failed", err);
+    return { docCount: 0, chunks: [] };
+  }
+}
+
 // ---- 价格表（billing_rules，v3） ----
 export interface BillingRule {
   model: string;
