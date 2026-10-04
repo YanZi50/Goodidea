@@ -9,18 +9,28 @@ import {
   addCost,
 } from "../lib/ai";
 import { onUseHotspot } from "../lib/bus";
-import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, type HistoryRow } from "../lib/db";
+import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, listSkills, type SkillRow, type HistoryRow } from "../lib/db";
 import { checkDuplicates, type DupHit } from "../lib/similarity";
 import { validateOutput, type ValCheck } from "../lib/validate";
 
 const toast = inject("toast") as (msg: string) => void;
 
-const skillChips = ["口播带货", "剧情短视频", "行情科普", "小红书种草"];
+const skillList = ref<SkillRow[]>([]); // 风格模板（db skills，v7）：名称+指令全文，可自定义
 const materialChips = ["价格表 v3", "名表回收话术", "包袋验货要点", "风格库·强节奏口播"];
 const hotspotChips = ["# 名表回收新趋势", "# 二手奢侈品行情", "不使用热点"];
-const activeSkills = ref(new Set(["口播带货"]));
+const activeSkills = ref(new Set<string>());
 const activeMats = ref(new Set(["价格表 v3"]));
 const activeHot = ref("# 名表回收新趋势");
+
+/** 加载风格模板（首次播种内置 4 个；过滤已删除的旧选中名，避免草稿/历史回填报错） */
+async function loadSkills() {
+  const rows = await listSkills();
+  if (!rows || rows.length === 0) return;
+  skillList.value = rows;
+  const valid = rows.map((r) => r.name);
+  const cur = [...activeSkills.value].filter((n) => valid.includes(n));
+  activeSkills.value = new Set(cur.length > 0 ? cur : (valid.length ? [valid[0]] : []));
+}
 
 const request = ref(
   "结合价格表与强节奏口播风格，写一条 60 秒口播脚本：黄金三秒用行情反差做钩子，中段讲名表回收流程与打款速度，结尾引导私信估价。"
@@ -156,6 +166,7 @@ function restoreDraft() {
 }
 
 onMounted(() => {
+  void loadSkills();
   // 热点页「接入生成」→ 设置热点参考并预填需求（需求为空时）
   const off = onUseHotspot((topic) => {
     activeHot.value = `# ${topic}`;
@@ -245,10 +256,16 @@ async function generate() {
   checkReport.value = null;
 
   const industry = await loadIndustryContext(); // 行业背景：设置页可配置（v6）
+  const skillText = [...activeSkills.value]
+    .map((n) => {
+      const s = skillList.value.find((x) => x.name === n);
+      return s ? `${s.name}：${s.instruction}` : n;
+    })
+    .join("\n");
   const system = [
     "你是资深短视频编导与文案专家，擅长把行业知识转化为高转化脚本。",
     `行业背景（以此为准，不得脱离）：${industry}`,
-    `启用 Skill：${[...activeSkills.value].join("、") || "无"}`,
+    `启用风格模板（严格遵循其风格要求）：\n${skillText || "无"}`,
     `可选关联素材：${[...activeMats.value].join("、") || "无"}`,
     `可选热点参考：${activeHot.value}`,
     "输出格式：按时间轴分段（如【0-3s · 钩子】），语言口语化、强节奏、短句，结尾带行动号召。",
@@ -382,7 +399,8 @@ function copyShots() {
       <div class="field">
         <label class="label">Skill 模板</label>
         <div class="chips">
-          <button v-for="c in skillChips" :key="c" class="chip" :class="{ on: activeSkills.has(c) }" @click="toggleChip(activeSkills, c)">{{ c }}</button>
+          <button v-for="c in skillList" :key="c.id" class="chip" :class="{ on: activeSkills.has(c.name) }" @click="toggleChip(activeSkills, c.name)" :title="c.instruction">{{ c.name }}</button>
+          <span style="font-size:12px;color:var(--text-faint);align-self:center">风格模板可在设置 → 风格模板中增删改</span>
         </div>
       </div>
       <div class="field">

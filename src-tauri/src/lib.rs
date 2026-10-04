@@ -228,6 +228,18 @@ pub fn run() {
               );",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "create_skills",
+            sql: "CREATE TABLE IF NOT EXISTS skills (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                instruction TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+              );",
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

@@ -16,8 +16,13 @@ import {
   isTauriRuntime,
   loadIndustryContext,
   setAppSetting,
+  listSkills,
+  createSkill,
+  updateSkill,
+  deleteSkill,
   type AIProfile,
   type BackupPayload,
+  type SkillRow,
 } from "../lib/db";
 import { emitDataChanged, onModelSwitched } from "../lib/bus";
 import { PRICE_TABLE, reloadPriceTable, testConnection } from "../lib/ai";
@@ -38,6 +43,56 @@ async function resetIndustry() {
   industry.value = "";
   await setAppSetting("industry_context", "");
   toast("已恢复默认行业背景");
+}
+
+// ---- 风格模板（skills，v7）：名称 + 指令全文，生成时注入 ----
+const skills = ref<SkillRow[]>([]);
+const skillForm = ref<{ name: string; instruction: string } | null>(null);
+const skillEditId = ref<number | null>(null);
+const skillDelId = ref<number | null>(null);
+
+async function loadSkills() {
+  const rows = await listSkills();
+  if (rows) skills.value = rows;
+}
+function skillStartNew() {
+  skillEditId.value = null;
+  skillForm.value = { name: "", instruction: "" };
+}
+function skillStartEdit(s: SkillRow) {
+  skillEditId.value = s.id;
+  skillForm.value = { name: s.name, instruction: s.instruction };
+}
+function skillCancel() {
+  skillForm.value = null;
+}
+async function skillSave() {
+  if (!skillForm.value) return;
+  const f = skillForm.value;
+  if (!f.name.trim() || !f.instruction.trim()) {
+    toast("名称与指令内容不能为空");
+    return;
+  }
+  if (skillEditId.value === null) {
+    await createSkill({ name: f.name.trim(), instruction: f.instruction.trim() });
+    toast(`已新增风格模板「${f.name.trim()}」`);
+  } else {
+    await updateSkill(skillEditId.value, { name: f.name.trim(), instruction: f.instruction.trim() });
+    toast(`已保存「${f.name.trim()}」`);
+  }
+  skillForm.value = null;
+  await loadSkills();
+}
+async function skillDelete(s: SkillRow) {
+  if (skillDelId.value !== s.id) {
+    skillDelId.value = s.id;
+    setTimeout(() => (skillDelId.value = null), 3000);
+    return;
+  }
+  await deleteSkill(s.id);
+  skillDelId.value = null;
+  toast(`已删除「${s.name}」`);
+  await loadSkills();
 }
 async function saveIndustry() {
   await setAppSetting("industry_context", industry.value.trim());
@@ -60,6 +115,7 @@ onMounted(async () => {
   await migrateLegacyConfig(); // 旧单配置首次升级为档案
   await loadProfiles();
   await loadIndustry();
+  await loadSkills();
   offModelSwitched = onModelSwitched(() => {
     // 顶栏切换模型后即时刷新，无需手动刷新
     void loadProfiles();
@@ -413,6 +469,53 @@ async function priceSave() {
         <button class="btn btn-primary btn-sm" @click="saveIndustry">{{ industrySaved ? "已保存 ✓" : "保存行业背景" }}</button>
         <button class="btn btn-ghost btn-sm" @click="resetIndustry">恢复默认</button>
         <span style="font-size:12px;color:var(--text-faint);align-self:center" v-if="industryLoaded && !industry">当前为内置默认文案</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">风格模板 <span class="hint">Skills · 增删改 · 生成时注入指令全文</span></div>
+      <div style="color:var(--text-muted);font-size:13.5px">
+        生成工作台的「风格模板」多选来自这里。每个模板 = 名称 + 指令内容（模型创作时遵循的风格要求）。
+        内置 4 个可修改/删除，也可新增自己的模板（如「3C 数码测评」「家居好物种草」）。
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+        <div v-for="s in skills" :key="s.id" class="profile-card" style="padding:10px 12px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <b style="font-size:13.5px">{{ s.name }}</b>
+            <span class="tag blue" style="font-size:11px">内置可编辑</span>
+            <div style="flex:1;min-width:200px;font-size:12px;color:var(--text-muted);line-height:1.5">{{ s.instruction.slice(0, 120) }}{{ s.instruction.length > 120 ? "…" : "" }}</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" @click="skillStartEdit(s)">编辑</button>
+              <button class="btn btn-ghost btn-sm danger" @click="skillDelete(s)">{{ skillDelId === s.id ? "确认删除？" : "删除" }}</button>
+            </div>
+          </div>
+        </div>
+        <div v-if="skills.length === 0" style="color:var(--text-faint);font-size:13px;padding:4px 0">
+          暂无风格模板 — 点击下方「+ 新增模板」创建
+        </div>
+      </div>
+
+      <template v-if="skillForm">
+        <div class="profile-card" style="border-color:var(--accent);margin-top:10px">
+          <div class="field" style="margin:0">
+            <label class="label">模板名称</label>
+            <input class="input" v-model="skillForm.name" placeholder="如：3C 数码测评" />
+          </div>
+          <div class="field" style="margin:8px 0 0">
+            <label class="label">指令内容 <span class="hint" style="color:var(--text-faint);font-weight:400">生成时整段注入提示词，模型据此创作</span></label>
+            <textarea class="textarea" v-model="skillForm.instruction" rows="4" placeholder="描述该风格的创作要求：结构、语气、节奏、禁忌……"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary btn-sm" @click="skillSave">保存模板</button>
+            <button class="btn btn-ghost btn-sm" @click="skillCancel">取消</button>
+          </div>
+        </div>
+      </template>
+
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary btn-sm" @click="skillStartNew">+ 新增模板</button>
+        <span style="font-size:12px;color:var(--text-faint);align-self:center">删除后生成工作台 chips 同步消失；草稿/历史里的旧名自动忽略</span>
       </div>
     </div>
 

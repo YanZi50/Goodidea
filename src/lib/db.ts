@@ -69,6 +69,124 @@ export async function loadIndustryContext(): Promise<string> {
   return v && v.trim() ? v : DEFAULT_INDUSTRY_CONTEXT;
 }
 
+// ---- 风格模板（skills，v7）：名称 + 指令全文，生成时注入 system（用户可增删改） ----
+export interface SkillRow {
+  id: number;
+  name: string;
+  instruction: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 内置风格模板种子（首次使用播种一次；用户删除后不再回填） */
+export const BUILTIN_SKILLS: Array<{ name: string; instruction: string }> = [
+  {
+    name: "口播带货",
+    instruction:
+      "口播带货风格：黄金三秒钩子（反差/痛点/悬念）→ 产品与利益点 → 信任背书 → 限时行动号召；短句、快节奏、口语化，20-30% 句号收尾留白。输出按【0-3s 钩子】等时间轴分段。",
+  },
+  {
+    name: "剧情短视频",
+    instruction:
+      "剧情短视频风格：钩子开场 → 冲突发展 → 反转/解决 → 自然植入卖点 → 结尾 CTA；人物对话占比高、场景描述简洁，单条 30-90 秒，结尾留悬念或引导关注。",
+  },
+  {
+    name: "行情科普",
+    instruction:
+      "行情科普风格：以真实行情/数据为骨架（必须来自关联素材，禁止编造数字），先抛出趋势结论 → 数据佐证 → 通俗解释 → 给普通人的行动建议；客观克制，不喊口号。",
+  },
+  {
+    name: "小红书种草",
+    instruction:
+      "小红书种草风格：标题抓眼球但不过火（数字+场景），正文分点干货+个人体验+避坑提醒，emoji 克制，结尾话题标签 3-5 个，口吻真诚像朋友分享。",
+  },
+];
+
+const SKILL_KEY = "goodidea.skills.v1";
+const SKILL_SEED_KEY = "goodidea.skills.seeded.v1";
+
+/** web 预览本地种子（与 db 同构） */
+function seedLocalSkills(now: string): SkillRow[] {
+  return BUILTIN_SKILLS.map((s, i) => ({ id: i + 1, name: s.name, instruction: s.instruction, created_at: now, updated_at: now }));
+}
+
+export async function listSkills(): Promise<SkillRow[] | null> {
+  if (!isTauriRuntime()) {
+    try {
+      const raw = localStorage.getItem(SKILL_KEY);
+      if (!raw) {
+        if (!localStorage.getItem(SKILL_SEED_KEY)) {
+          localStorage.setItem(SKILL_KEY, JSON.stringify(seedLocalSkills(new Date().toISOString())));
+          localStorage.setItem(SKILL_SEED_KEY, "1");
+        } else {
+          localStorage.setItem(SKILL_KEY, "[]");
+        }
+      }
+      return JSON.parse(localStorage.getItem(SKILL_KEY) ?? "[]") as SkillRow[];
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const d = await getDb();
+    const rows = await d.select<SkillRow[]>("SELECT id, name, instruction, created_at, updated_at FROM skills ORDER BY id");
+    if (rows.length === 0) {
+      const seeded = await d.select<{ value: string }[]>("SELECT value FROM app_settings WHERE key = 'skills_seeded'");
+      if (seeded.length === 0) {
+        const now = new Date().toISOString();
+        for (const s of BUILTIN_SKILLS) {
+          await d.execute("INSERT OR IGNORE INTO skills (name, instruction, created_at, updated_at) VALUES ($1, $2, $3, $3)", [s.name, s.instruction, now]);
+        }
+        await d.execute("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('skills_seeded', '1', $1)", [now]);
+      }
+      return d.select<SkillRow[]>("SELECT id, name, instruction, created_at, updated_at FROM skills ORDER BY id");
+    }
+    return rows;
+  } catch (err) {
+    console.error("[db] listSkills failed", err);
+    return null;
+  }
+}
+
+export async function createSkill(s: { name: string; instruction: string }): Promise<number> {
+  const now = new Date().toISOString();
+  if (!isTauriRuntime()) {
+    const list = (await listSkills()) ?? [];
+    const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
+    list.push({ id, name: s.name, instruction: s.instruction, created_at: now, updated_at: now });
+    localStorage.setItem(SKILL_KEY, JSON.stringify(list));
+    return id;
+  }
+  const d = await getDb();
+  const res = await d.execute("INSERT INTO skills (name, instruction, created_at, updated_at) VALUES ($1, $2, $3, $3)", [s.name, s.instruction, now]);
+  return Number(res.lastInsertId ?? 0);
+}
+
+export async function updateSkill(id: number, s: { name: string; instruction: string }): Promise<void> {
+  const now = new Date().toISOString();
+  if (!isTauriRuntime()) {
+    const list = (await listSkills()) ?? [];
+    const i = list.findIndex((r) => r.id === id);
+    if (i >= 0) {
+      list[i] = { ...list[i], name: s.name, instruction: s.instruction, updated_at: now };
+      localStorage.setItem(SKILL_KEY, JSON.stringify(list));
+    }
+    return;
+  }
+  const d = await getDb();
+  await d.execute("UPDATE skills SET name = $1, instruction = $2, updated_at = $3 WHERE id = $4", [s.name, s.instruction, now, id]);
+}
+
+export async function deleteSkill(id: number): Promise<void> {
+  if (!isTauriRuntime()) {
+    const list = (await listSkills()) ?? [];
+    localStorage.setItem(SKILL_KEY, JSON.stringify(list.filter((r) => r.id !== id)));
+    return;
+  }
+  const d = await getDb();
+  await d.execute("DELETE FROM skills WHERE id = $1", [id]);
+}
+
 export function isTauriRuntime(): boolean {
   return (
     typeof window !== "undefined" &&
