@@ -9,7 +9,8 @@ import {
   addCost,
 } from "../lib/ai";
 import { onUseHotspot } from "../lib/bus";
-import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, type HistoryRow } from "../lib/db";
+import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, type HistoryRow } from "../lib/db";
+import { checkDuplicates, type DupHit } from "../lib/similarity";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -62,6 +63,36 @@ function histMeta(h: HistoryRow): { model?: string; cost?: string } {
     return h.meta ? (JSON.parse(h.meta) as { model?: string; cost?: string }) : {};
   } catch {
     return {};
+  }
+}
+
+// ---- 文案查重：输出 vs 文档库素材 + 生成历史（本地 bigram 相似度，不耗 token） ----
+const dupOpen = ref(false);
+const dupLoading = ref(false);
+const dupHits = ref<DupHit[]>([]);
+
+async function runDupCheck() {
+  if (!output.value.trim()) {
+    toast("先生成内容，再点击查重");
+    return;
+  }
+  dupOpen.value = true;
+  dupLoading.value = true;
+  dupHits.value = [];
+  try {
+    const chunks = await listChunksWithDoc(3000);
+    const histories = await listHistories(80);
+    const candidates = [
+      ...(chunks ?? []).map((c) => ({ source: c.doc, kind: "doc" as const, content: c.content })),
+      ...(histories ?? [])
+        .filter((h) => h.kind === "generation")
+        .map((h) => ({ source: h.title, kind: "history" as const, content: h.output })),
+    ];
+    dupHits.value = checkDuplicates(output.value, candidates);
+  } catch (err) {
+    toast(`查重失败：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    dupLoading.value = false;
   }
 }
 
@@ -364,7 +395,25 @@ function copyShots() {
         <button class="btn btn-green btn-sm" @click="copyText">复制全文</button>
         <button class="btn btn-ghost btn-sm" @click="exportShots" :disabled="!output || generating">导出分镜表</button>
         <button class="btn btn-ghost btn-sm" :disabled="generating" @click="generate">重新生成</button>
+        <button class="btn btn-ghost btn-sm" :disabled="!output || generating" @click="runDupCheck">{{ dupLoading ? "查重中…" : "查重" }}</button>
         <button class="btn btn-ghost btn-sm" @click="toggleHistory">{{ historyOpen ? "收起历史" : "历史记录" }}</button>
+      </div>
+      <div v-if="dupOpen" class="dup-panel">
+        <div class="dup-head">
+          <span>查重结果：与知识库素材 + 生成历史比对（bigram 相似度，本地计算不耗 token）</span>
+          <button class="btn btn-ghost btn-sm" @click="dupOpen = false">收起</button>
+        </div>
+        <div v-if="dupLoading" style="font-size:13px;color:var(--text-faint);padding:8px 0">正在比对全部素材与历史…</div>
+        <div v-else-if="dupHits.length === 0" style="font-size:13px;color:var(--green);padding:8px 0">未发现明显雷同（相似度均低于 0.25）— 内容可放心使用</div>
+        <div v-for="(h, i) in dupHits" :key="i" class="dup-item" :class="h.level">
+          <div class="dup-row1">
+            <span class="dup-tag" :class="h.level">{{ h.level === "high" ? "高危" : h.level === "mid" ? "中危" : "低危" }}</span>
+            <span class="dup-score">{{ (h.score * 100).toFixed(1) }}%</span>
+            <span class="dup-src">{{ h.kind === "doc" ? "文档" : "历史" }} · {{ h.source }}</span>
+          </div>
+          <div class="dup-snippet">{{ h.snippet }}</div>
+        </div>
+        <div v-if="dupHits.length > 0" style="font-size:12px;color:var(--text-faint);margin-top:6px">≥50% 高危建议改写后发布；≥35% 中危检查关键句</div>
       </div>
       <div v-if="historyOpen" class="hist-panel">
         <div v-if="histories.length === 0" style="font-size:13px;color:var(--text-faint);padding:8px 0">暂无生成历史 — 完成一次生成后自动记录</div>
@@ -440,4 +489,26 @@ function copyShots() {
 .hi-title { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hi-sub { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
 .hi-del { flex-shrink: 0; }
+.dup-panel {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 8px 10px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.dup-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+.dup-item { padding: 7px 6px; border-radius: 6px; border-left: 3px solid var(--border); margin-bottom: 6px; }
+.dup-item.high { border-left-color: var(--red); background: rgba(255, 84, 73, 0.07); }
+.dup-item.mid { border-left-color: var(--accent); background: rgba(232, 179, 106, 0.06); }
+.dup-item.low { border-left-color: var(--green); background: rgba(76, 175, 80, 0.05); }
+.dup-row1 { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dup-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+.dup-tag.high { background: var(--red); color: #fff; }
+.dup-tag.mid { background: var(--accent); color: #000; }
+.dup-tag.low { background: var(--green); color: #fff; }
+.dup-score { font-weight: 700; color: var(--text); font-size: 14px; }
+.dup-src { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dup-snippet { font-size: 12px; color: var(--text-faint); margin-top: 3px; line-height: 1.5; }
 </style>
