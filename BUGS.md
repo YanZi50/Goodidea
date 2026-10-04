@@ -161,6 +161,18 @@
 
 ---
 
+## BUG-014：备份还原失败——tauri-plugin-sql 连接池下 last_insert_rowid() 跨连接取错
+
+- **日期**：2026-10-04
+- **关联 commit**：@47a0c9d（引入），修复 @待回填
+- **所属模块**：知识库备份还原（src/lib/db.ts importBackupData）
+- **症状**：真机「还原备份」失败（导入计数异常或 chunks.doc_id 指向不存在的文档，文档可导入但分块错位）。
+- **根因**：tauri-plugin-sql 内部为连接池（r2d2/SQLite 单写者），`d.execute(INSERT)` 与随后 `SELECT last_insert_rowid()` 可能命中**不同连接**，返回的不是本次 INSERT 的自增 id（跨连接读不到/读错）。基于 last_insert_rowid 重建 doc_id 映射的方案在池化连接下不可靠。
+- **解决**：改为**显式 id 插入**——`INSERT INTO documents (id, ...)` 直接写入备份中的原始 doc.id（SQLite AUTOINCREMENT 允许显式指定主键，且会把 sqlite_sequence 提升到 max(id)，后续自增不受影响），chunks 沿用备份 doc_id，彻底移除 last_insert_rowid 依赖；另在还原解析处对 JSON 做 BOM 容错（`content.replace(/^\uFEFF/, "")`）。
+- **预防**：连接池环境下禁止依赖 `last_insert_rowid()`/`last_insert_rowid` 跨语句取值；需要主键关联时优先显式写 id 或用事务内单连接保证。代码注释已标注（db.ts importBackupData）。
+
+---
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。
