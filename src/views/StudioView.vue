@@ -7,6 +7,7 @@ import {
   addCost,
 } from "../lib/ai";
 import { onUseHotspot } from "../lib/bus";
+import { isTauriRuntime, searchMaterialChunks } from "../lib/db";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -23,6 +24,7 @@ const request = ref(
 const output = ref("");
 const generating = ref(false);
 const meta = ref<{ model: string; tokens: string; cost: string } | null>(null);
+const materialHit = ref(""); // 素材检索命中摘要（如「3 篇」），空=未命中/降级
 
 // ---- 草稿（localStorage 存配置 + 输出 + 时间） ----
 const DRAFT_KEY = "goodidea.studio.draft.v1";
@@ -98,6 +100,34 @@ function toggleChip(set: Set<string>, label: string) {
   activeMats.value = new Set(activeMats.value);
 }
 
+/** 素材 chip → 检索关键词（文档库文件名/内容匹配） */
+const MAT_KEYWORDS: Record<string, string[]> = {
+  "价格表 v3": ["价格", "报价", "行情", "折扣"],
+  "名表回收话术": ["名表", "回收", "话术"],
+  "包袋验货要点": ["包袋", "验货", "成色"],
+  "风格库·强节奏口播": ["风格库", "口播", "强节奏"],
+};
+
+/** 按选中素材在文档库检索真实内容；web/无命中时返回空（降级为仅传素材名） */
+async function fetchMaterialNotes(): Promise<{ notes: string; summary: string }> {
+  const mats = [...activeMats.value];
+  if (mats.length === 0 || !isTauriRuntime()) return { notes: "", summary: "" };
+  const kws = mats.flatMap((m) => MAT_KEYWORDS[m] ?? []);
+  if (kws.length === 0) return { notes: "", summary: "" };
+  try {
+    const { docCount, chunks } = await searchMaterialChunks(kws, 24);
+    if (chunks.length === 0) return { notes: "", summary: "" };
+    const parts = chunks.map((c) => `【${c.doc}】${c.content}`);
+    return {
+      notes: `\n\n## 关联素材（文档库检索命中 ${docCount} 篇，${chunks.length} 块，已截取）\n${parts.join("\n---\n")}`,
+      summary: `${docCount} 篇`,
+    };
+  } catch (err) {
+    console.error("[studio] fetchMaterialNotes failed", err);
+    return { notes: "", summary: "" };
+  }
+}
+
 async function generate() {
   const cfg = loadAIConfig();
   if (!cfg) {
@@ -119,7 +149,10 @@ async function generate() {
     `可选热点参考：${activeHot.value}`,
     "输出格式：按时间轴分段（如【0-3s · 钩子】），语言口语化、强节奏、短句，结尾带行动号召。",
   ].join("\n");
-  const prompt = `需求：${request.value}\n\n可用素材内容由知识库提供，当前提示词阶段先按需求与经验直接创作。`;
+  // 素材接通：从文档库按关键词检索选中素材的真实内容拼进 prompt（web/无命中降级）
+  const mat = await fetchMaterialNotes();
+  materialHit.value = mat.summary;
+  const prompt = `需求：${request.value}${mat.notes}\n\n可用素材内容：${mat.notes ? "见上方「关联素材」章节，务必以真实内容为事实依据创作，不得编造价格与数据。" : "由知识库提供，当前提示词阶段先按需求与经验直接创作。"}`;
 
   try {
     const { textStream, usage } = await streamGeneration(cfg, system, prompt);
@@ -252,6 +285,7 @@ function copyShots() {
           <span class="tag gold">{{ meta.model }}</span>
           <span class="tag blue">{{ meta.tokens }}</span>
           <span class="tag green">{{ meta.cost }}</span>
+          <span v-if="materialHit" class="tag gold" title="本次生成检索到的文档库素材数量">素材 {{ materialHit }}</span>
         </div>
       </div>
       <div class="costbar" v-if="meta">
