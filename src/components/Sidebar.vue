@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { inject, ref, type Ref } from "vue";
+import { save } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime, exportBackupData } from "../lib/db";
 
 defineProps<{ active: string }>();
 const emit = defineEmits<{ navigate: [id: string] }>();
@@ -21,6 +24,32 @@ const settingsIcon = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65
 
 function navigate(id: string) {
   emit("navigate", id);
+}
+
+/** 导出知识库备份：全量 JSON → 保存对话框 → 写文件 */
+async function exportBackup() {
+  if (!isTauriRuntime()) {
+    toast("备份导出需在桌面应用内使用");
+    return;
+  }
+  const data = await exportBackupData();
+  if (!data) {
+    toast("备份导出失败（数据库不可用）");
+    return;
+  }
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const path = await save({
+    title: "导出知识库备份",
+    defaultPath: `goodidea-backup-${stamp}.json`,
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (!path) return; // 用户取消
+  try {
+    await invoke("save_backup", { path, content: JSON.stringify(data, null, 2) });
+    toast(`备份已导出：${path.split(/[\\/]/).pop()}`);
+  } catch (err) {
+    toast(`导出失败：${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 </script>
 
@@ -67,7 +96,7 @@ function navigate(id: string) {
         <button class="foot-btn" @click="toast('设置与帮助即将开放（设计稿演示）')">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></svg><span>帮助</span>
         </button>
-        <button class="foot-btn" @click="toast('导出知识库备份即将开放（设计稿演示）')">
+        <button class="foot-btn" @click="exportBackup" title="导出知识库备份（文档/分组/价格表/模型档案 JSON）">
           <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg><span>导出</span>
         </button>
       </div>
