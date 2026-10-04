@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, inject } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listDocuments, countChunks, listAllChunkContent, listGroups } from "../lib/db";
@@ -105,6 +105,78 @@ const renderedResult = computed(() => {
   return DOMPurify.sanitize(marked.parse(result.value, { async: false }) as string);
 });
 
+// ---- 问题/建议分离：渲染后把「指出问题」诊断表拆成左右两栏（问题红 / 建议绿） ----
+const mdBox = ref<HTMLElement | null>(null);
+
+/** 表头定位列序（不依赖固定列位置，模型列序变化也能适配） */
+function colIndex(heads: string[], names: string[]): number {
+  return heads.findIndex((h) => names.some((n) => h.includes(n)));
+}
+
+function splitIssueTable(tbl: HTMLTableElement) {
+  const heads = Array.from(tbl.querySelectorAll("thead th")).map((th) =>
+    (th.textContent ?? "").replace(/[⚠✓\s]/g, "")
+  );
+  const iPri = colIndex(heads, ["优先级"]);
+  const iType = colIndex(heads, ["问题类型"]);
+  const iProb = colIndex(heads, ["具体问题", "问题"]);
+  const iFix = colIndex(heads, ["改进建议", "建议"]);
+  if (iProb < 0 || iFix < 0) return; // 非诊断表结构，保持原样
+
+  const wrap = document.createElement("div");
+  wrap.className = "issue-split";
+  const hdr = document.createElement("div");
+  hdr.className = "issue-colh";
+  const hL = document.createElement("div");
+  hL.className = "issue-h issue-h-prob";
+  hL.textContent = "⚠ 具体问题";
+  const hR = document.createElement("div");
+  hR.className = "issue-h issue-h-fix";
+  hR.textContent = "✓ 改进建议";
+  hdr.append(hL, hR);
+  wrap.append(hdr);
+
+  tbl.querySelectorAll("tbody tr").forEach((tr) => {
+    const tds = tr.querySelectorAll("td");
+    const row = document.createElement("div");
+    row.className = "issue-row";
+    const left = document.createElement("div");
+    left.className = "issue-cell issue-cell-prob";
+    if (iPri >= 0 && tds[iPri]) {
+      const p = document.createElement("span");
+      p.className = "issue-pri";
+      p.textContent = (tds[iPri].textContent ?? "").trim();
+      left.append(p);
+    }
+    if (iType >= 0 && tds[iType]) {
+      const t = document.createElement("span");
+      t.className = "issue-type";
+      t.textContent = (tds[iType].textContent ?? "").trim();
+      left.append(t);
+    }
+    if (iProb >= 0 && tds[iProb]) left.append(...Array.from(tds[iProb].childNodes).map((n) => n.cloneNode(true)));
+    const right = document.createElement("div");
+    right.className = "issue-cell issue-cell-fix";
+    if (iFix >= 0 && tds[iFix]) right.append(...Array.from(tds[iFix].childNodes).map((n) => n.cloneNode(true)));
+    row.append(left, right);
+    wrap.append(row);
+  });
+  tbl.replaceWith(wrap);
+}
+
+// renderedResult 变化后（nextTick 等 DOM 更新完）对容器内诊断表做拆分
+watch(renderedResult, async () => {
+  await nextTick();
+  if (!mdBox.value) return;
+  const tbl = mdBox.value.querySelector("table");
+  if (!tbl) return;
+  try {
+    splitIssueTable(tbl);
+  } catch (err) {
+    console.error("[analysis] splitIssueTable failed", err);
+  }
+});
+
 async function runAnalysis() {
   const cfg = loadAIConfig();
   if (!cfg) {
@@ -200,7 +272,7 @@ function clearDocScope() {
         <span v-if="groups.length === 0 && docScope === null" style="color:var(--text-faint);font-size:12px">暂无分组 — 到文档库新建分组并移入文档后可聚焦分析</span>
       </div>
       <div v-if="analyzing" style="color:var(--text-faint);font-size:13px;padding:10px 0">正在分析{{ scopeLabel }}（约 30–90 秒）…</div>
-      <div v-else-if="result" class="scroll-limit"><div class="md-render" v-html="renderedResult"></div></div>
+      <div v-else-if="result" class="scroll-limit"><div ref="mdBox" class="md-render" v-html="renderedResult"></div></div>
       <div v-else style="color:var(--text-faint);font-size:13px;padding:10px 0">选择范围后点击「开始分析」：浓缩核心要点 + 指出问题（矛盾 / 缺口 / 低质段落 / 建议）。</div>
       <div v-if="lastMeta" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">
         <span class="tag green">{{ lastMeta.cost }}</span>

@@ -279,6 +279,21 @@ table.tbl tr:hover .row-actions{opacity:1}
 /* 列内加粗/强调保持列语义色（不被金色覆盖） */
 .md-render table td:nth-child(3) strong{color:var(--red);font-weight:700}
 .md-render table td:nth-child(4) strong{color:var(--green);font-weight:700}
+/* 问题/建议两栏分离（渲染后把诊断表重排为左右卡片：问题红 / 建议绿） */
+.issue-split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0}
+.issue-colh{display:contents}
+.issue-h{font-size:12.5px;font-weight:700;padding:6px 10px;border-radius:var(--radius-sm) var(--radius-sm) 0 0}
+.issue-h-prob{background:var(--red-soft);color:var(--red);border:1px solid var(--red);border-bottom:none}
+.issue-h-fix{background:var(--green-soft);color:var(--green);border:1px solid var(--green);border-bottom:none}
+.issue-row{display:contents}
+.issue-cell{border-radius:0 0 var(--radius-sm) var(--radius-sm);padding:10px 12px;font-size:13px;line-height:1.7;word-break:break-word}
+.issue-cell-prob{background:var(--red-soft);color:var(--red);border:1px solid var(--red);border-top:none}
+.issue-cell-fix{background:var(--green-soft);color:var(--green);border:1px solid var(--green);border-top:none}
+.issue-pri{display:inline-block;padding:1px 8px;border-radius:5px;font-size:11.5px;font-weight:700;background:rgba(229,115,110,.18);color:#E5736E;margin:0 6px 4px 0;vertical-align:middle}
+.issue-type{display:inline-block;padding:1px 8px;border-radius:5px;font-size:11.5px;background:rgba(232,179,106,.15);color:var(--accent);margin:0 6px 4px 0;vertical-align:middle}
+.issue-cell strong{color:var(--red);font-weight:700}
+.issue-cell-fix strong{color:var(--green);font-weight:700}
+@media (max-width:760px){.issue-split{grid-template-columns:1fr}}
 /* ===== 分组筛选 / 范围切换 ===== */
 .chip{border:1px solid var(--surface-2);background:transparent;color:var(--text-muted);border-radius:999px;padding:4px 12px;font-size:12.5px;cursor:pointer;transition:all .15s}
 .chip:hover{color:var(--text);border-color:var(--text-muted)}
