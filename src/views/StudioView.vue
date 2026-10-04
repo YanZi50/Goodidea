@@ -11,6 +11,7 @@ import {
 import { onUseHotspot } from "../lib/bus";
 import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, type HistoryRow } from "../lib/db";
 import { checkDuplicates, type DupHit } from "../lib/similarity";
+import { validateOutput, type ValCheck } from "../lib/validate";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -207,6 +208,24 @@ async function fetchMaterialNotes(): Promise<{ notes: string; summary: string }>
   }
 }
 
+// ---- 3 版生成（A/B/C 选稿）：并发生成，切换同步当前输出 ----
+const versionCount = ref<1 | 3>(1);
+const outputs = ref<string[]>([]);
+const metas = ref<Array<{ model: string; tokens: string; cost: string } | null>>([]);
+const activeVer = ref(0);
+
+function setActiveVer(i: number) {
+  activeVer.value = i;
+  output.value = outputs.value[i] ?? "";
+  meta.value = metas.value[i] ?? null;
+  checkReport.value = output.value ? validateOutput(output.value) : null; // 切换版本同步校验报告
+}
+
+// ---- 生成后自动校验（本地规则，不耗 token） ----
+const checkReport = ref<ValCheck[] | null>(null);
+const checkOpen = ref(false);
+const checkPassed = computed(() => (checkReport.value ?? []).filter((c) => c.ok).length);
+
 async function generate() {
   const cfg = await loadActiveConfig();
   if (!cfg) {
@@ -220,6 +239,10 @@ async function generate() {
   generating.value = true;
   output.value = "";
   meta.value = null;
+  outputs.value = [];
+  metas.value = [];
+  activeVer.value = 0;
+  checkReport.value = null;
 
   const system = [
     "你是资深短视频编导与文案专家，服务于奢侈品回收行业（名表/包袋）。",
@@ -232,28 +255,46 @@ async function generate() {
   const mat = await fetchMaterialNotes();
   materialHit.value = mat.summary;
   const prompt = `需求：${request.value}${mat.notes}\n\n可用素材内容：${mat.notes ? "见上方「关联素材」章节，务必以真实内容为事实依据创作，不得编造价格与数据。" : "由知识库提供，当前提示词阶段先按需求与经验直接创作。"}`;
+  const N = versionCount.value === 3 ? 3 : 1;
 
   try {
-    const { textStream, usage } = await streamGeneration(cfg, system, prompt);
-    for await (const chunk of textStream) {
-      output.value += chunk;
-    }
-    const cost = calcCost(cfg.label, await usage);
-    addCost(cfg.label, cost.amount);
-    meta.value = {
-      model: cfg.label,
-      tokens: `${cost.inputTokens.toLocaleString()} in / ${cost.outputTokens.toLocaleString()} out`,
-      cost: `¥${cost.amount.toFixed(2)}`,
-    };
-    await recordHistory({
-      kind: "generation",
-      title: request.value.slice(0, 40),
-      prompt: request.value,
-      output: output.value,
-      meta: JSON.stringify(meta.value),
+    const runs = Array.from({ length: N }, async (_, i) => {
+      const variant = N === 3 ? `\n\n这是第 ${i + 1} 个版本（版本${"ABC"[i]}）：核心信息与行动号召保持一致，但开头钩子、句式和节奏必须明显区别于另外两个版本，供用户选稿。` : "";
+      let text = "";
+      const { textStream, usage } = await streamGeneration(cfg, system, prompt + variant);
+      for await (const chunk of textStream) {
+        text += chunk;
+      }
+      const cost = calcCost(cfg.label, await usage);
+      addCost(cfg.label, cost.amount);
+      return {
+        text,
+        meta: {
+          model: cfg.label,
+          tokens: `${cost.inputTokens.toLocaleString()} in / ${cost.outputTokens.toLocaleString()} out`,
+          cost: `¥${cost.amount.toFixed(2)}`,
+        },
+      };
     });
-    await loadHistory(); // 历史面板开着时实时跟进最新一条
-    toast(`生成完成 · ${meta.value.cost}`);
+    const results: { text: string; meta: { model: string; tokens: string; cost: string } }[] = await Promise.all(runs);
+    outputs.value = results.map((r) => r.text);
+    metas.value = results.map((r) => r.meta);
+    setActiveVer(0);
+    // 每版写独立历史（3 版时带版本后缀，便于回填）
+    for (let i = 0; i < results.length; i++) {
+      await recordHistory({
+        kind: "generation",
+        title: `${request.value.slice(0, 40)}${N === 3 ? ` · 版本${"ABC"[i]}` : ""}`,
+        prompt: request.value,
+        output: results[i].text,
+        meta: JSON.stringify(results[i].meta),
+      });
+    }
+    await loadHistory(); // 历史面板开着时实时跟进最新一批
+    checkReport.value = validateOutput(output.value);
+    const totalCost = results.reduce((s, r) => s + parseFloat(r.meta.cost.replace("¥", "")), 0);
+    const doneMsg = N === 3 ? `已生成 3 版 · 共 ¥${totalCost.toFixed(2)} · 请选稿` : `生成完成 · ${results[0]!.meta.cost}`;
+    toast(doneMsg);
   } catch (err) {
     toast(`生成失败：${err instanceof Error ? err.message : String(err)}`);
   } finally {
@@ -357,6 +398,14 @@ function copyShots() {
         <div style="font-size:12px;color:var(--text-faint);margin-top:4px">热点页点条目「生成」图标可直接接入此处</div>
       </div>
       <div class="field">
+        <label class="label">生成模式</label>
+        <div class="chips">
+          <button class="chip" :class="{ on: versionCount === 1 }" @click="versionCount = 1">单版</button>
+          <button class="chip" :class="{ on: versionCount === 3 }" @click="versionCount = 3">生成 3 版</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:4px">3 版模式并发生成 A/B/C 三稿（钩子与节奏不同），输出区可切换选稿，每版独立查重/复制/导出</div>
+      </div>
+      <div class="field">
         <label class="label">需求描述</label>
         <textarea class="textarea" v-model="request" placeholder="例：结合价格表与风格库，写一条 60 秒口播带货脚本……"></textarea>
       </div>
@@ -373,6 +422,10 @@ function copyShots() {
     </div>
     <div class="card">
       <div class="panel-head"><span class="ph-t">输出</span><span class="ph-h">流式渲染 · 实时消耗</span></div>
+      <div v-if="outputs.length > 1" class="ver-tabs">
+        <button v-for="(_, i) in outputs" :key="i" class="ver-tab" :class="{ on: activeVer === i }" @click="setActiveVer(i)">版本 {{ "ABC"[i] }}</button>
+        <span class="ver-hint">操作按钮作用于当前版本 · 每版已独立写入历史</span>
+      </div>
       <div class="out-area" :class="{ empty: !output && !generating }">
         <template v-if="output || generating">
           <div ref="outBox" class="out-line md-render" v-html="renderedOutput"></div>
@@ -385,6 +438,20 @@ function copyShots() {
           <span class="tag blue">{{ meta.tokens }}</span>
           <span class="tag green">{{ meta.cost }}</span>
           <span v-if="materialHit" class="tag gold" title="本次生成检索到的文档库素材数量">素材 {{ materialHit }}</span>
+        </div>
+      </div>
+      <div v-if="checkReport" class="check-panel">
+        <div class="check-head" @click="checkOpen = !checkOpen">
+          <span :class="checkPassed === checkReport.length ? 'ok' : 'warn'">生成校验 {{ checkPassed }}/{{ checkReport.length }}{{ checkPassed === checkReport.length ? " · 全部通过" : "" }}</span>
+          <svg class="chev" viewBox="0 0 24 24" :style="{ transform: checkOpen ? 'rotate(180deg)' : '' }"><path d="M6 9l6 6 6-6" /></svg>
+        </div>
+        <div v-if="checkOpen" class="check-body">
+          <div v-for="(c, i) in checkReport" :key="i" class="check-item" :class="c.ok ? 'ok' : 'warn'">
+            <span class="check-dot">{{ c.ok ? "✓" : "!" }}</span>
+            <span class="check-label">{{ c.label }}</span>
+            <span class="check-detail">{{ c.detail }}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-faint)">校验为本地规则提示（长度/号召/时间轴/价格），供人工复核，不阻断使用</div>
         </div>
       </div>
       <div class="costbar" v-if="meta">
@@ -454,6 +521,22 @@ function copyShots() {
 </template>
 
 <style scoped>
+.ver-tabs { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ver-tab { padding: 5px 14px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-muted); cursor: pointer; }
+.ver-tab.on { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+.ver-hint { font-size: 12px; color: var(--text-faint); }
+.check-panel { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.check-head { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; font-size: 13px; cursor: pointer; }
+.check-head .ok { color: var(--green); }
+.check-head .warn { color: var(--accent); }
+.check-head .chev { width: 16px; height: 16px; fill: none; stroke: var(--text-muted); transition: transform .15s; }
+.check-body { border-top: 1px solid var(--border); padding: 8px 12px; }
+.check-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; font-size: 12.5px; }
+.check-item.ok .check-dot { color: var(--green); }
+.check-item.warn .check-dot { color: var(--accent); font-weight: 700; }
+.check-item.warn .check-label { color: var(--accent); }
+.check-label { flex-shrink: 0; font-weight: 600; color: var(--text); min-width: 88px; }
+.check-detail { color: var(--text-muted); line-height: 1.5; }
 .shot-panel {
   margin-top: 12px;
   border: 1px solid rgba(232, 179, 106, 0.3);
