@@ -114,6 +114,12 @@ fn import_backup(app: tauri::AppHandle, json: String) -> Result<String, String> 
                     .map_err(|e| e.to_string())?;
             }
         }
+        // 兜底清理：无论备份格式/历史脏数据，还原后不允许孤儿引用（group_id 指向不存在的组一律归 NULL）——BUG-017 二次防御
+        conn.execute(
+            "UPDATE documents SET group_id = NULL WHERE group_id IS NOT NULL AND group_id NOT IN (SELECT id FROM groups)",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
         {
             let mut st = conn
                 .prepare("INSERT INTO chunks (doc_id, seq, content, token_count) VALUES (?1, ?2, ?3, ?4)")

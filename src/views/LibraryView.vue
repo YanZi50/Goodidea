@@ -503,21 +503,24 @@ function onDrop(e: DragEvent) {
       </button>
     </div>
 
-    <!-- 组导航：全部（跨组总览）/ 未分组 / 各组 / 新建组 -->
-    <div class="group-nav">
-      <button class="chip" :class="{ on: groupFilter === 'all' }" @click="groupFilter = 'all'">全部 {{ docs.length }}</button>
-      <button class="chip" :class="{ on: groupFilter === 'none' }" @click="groupFilter = 'none'">未分组 {{ ungroupedCount }}</button>
-      <span v-for="g in groups" :key="g.id" class="g-chip-wrap">
-        <!-- chip 本体始终显示组名+数量（宽度不变零跳动）；删除入口为右上角小 pill，确认态原位变红底白字 -->
-        <button class="chip g-chip" :class="{ on: groupFilter === g.id }" @click="groupFilter = g.id">{{ g.name }} {{ g.doc_count }}</button>
-        <button class="g-del" :class="{ confirm: groupDelId === g.id }" :title="groupDelId === g.id ? '再次点击确认删除（组内文档移回未分组）' : '删除分组（组内文档移回未分组）'" @click.stop="removeGroup(g)">{{ groupDelId === g.id ? "确认" : "删除" }}</button>
-      </span>
-      <template v-if="creatingGroup">
-        <input class="input g-new-input" v-model="newGroupName" placeholder="分组名称…" @keydown.enter="createGroupSubmit" />
+    <!-- 组导航：全部（跨组总览）/ 未分组 / 各组 / 新建组；创建表单悬浮不占布局（零跳动） -->
+    <div class="group-nav-wrap">
+      <div class="group-nav">
+        <button class="chip" :class="{ on: groupFilter === 'all' }" @click="groupFilter = 'all'">全部 {{ docs.length }}</button>
+        <button class="chip" :class="{ on: groupFilter === 'none' }" @click="groupFilter = 'none'">未分组 {{ ungroupedCount }}</button>
+        <span v-for="g in groups" :key="g.id" class="g-chip-wrap">
+          <!-- chip 本体始终显示组名+数量（宽度不变零跳动）；删除入口为右上角小 pill，确认态原位变红底白字 -->
+          <button class="chip g-chip" :class="{ on: groupFilter === g.id }" @click="groupFilter = g.id">{{ g.name }} {{ g.doc_count }}</button>
+          <button class="g-del" :class="{ confirm: groupDelId === g.id }" :title="groupDelId === g.id ? '再次点击确认删除（组内文档移回未分组）' : '删除分组（组内文档移回未分组）'" @click.stop="removeGroup(g)">{{ groupDelId === g.id ? "确认" : "删除" }}</button>
+        </span>
+        <button class="btn btn-ghost btn-sm" @click="creatingGroup = true">+ 新建组</button>
+      </div>
+      <!-- 创建分组悬浮表单：absolute 不占 flow，导航布局零跳动 -->
+      <div v-if="creatingGroup" class="g-create-panel">
+        <input class="input g-new-input" v-model="newGroupName" placeholder="分组名称…" @keydown.enter="createGroupSubmit" @keydown.esc="creatingGroup = false; newGroupName = ''" />
         <button class="btn btn-primary btn-sm" @click="createGroupSubmit">创建</button>
         <button class="btn btn-ghost btn-sm" @click="creatingGroup = false; newGroupName = ''">取消</button>
-      </template>
-      <button v-else class="btn btn-ghost btn-sm" @click="creatingGroup = true">+ 新建组</button>
+      </div>
     </div>
 
     <div class="card" style="padding:0;overflow:hidden">
@@ -534,20 +537,18 @@ function onDrop(e: DragEvent) {
           <button class="btn btn-ghost btn-sm" :disabled="classifying || selected.size === 0" @click="classifyScope = 'selected'; startClassify()" title="仅对勾选的文档分类">分类勾选</button>
           <button class="btn btn-danger btn-sm" :disabled="classifying || selected.size === 0" :title="classifying ? '分类进行中，请稍候' : (selected.size === 0 ? '先勾选文档' : '删除选中文档')" @click="removeSelected">删除</button>
           <button class="btn btn-ghost btn-sm" :disabled="classifying || selected.size === 0" :title="classifying ? '分类进行中，请稍候' : (selected.size === 0 ? '先勾选文档' : '移出分组（回到未分组）')" @click="ungroupSelected">移出分组</button>
-          <button v-if="selected.size > 0" class="btn btn-ghost btn-sm" :disabled="classifying" @click="selected = new Set()">取消</button>
+          <button class="btn btn-ghost btn-sm" :disabled="selected.size === 0 || classifying" @click="selected = new Set()">取消</button>
         </div>
       </div>
-      <!-- 第二行：常驻移组槽位（固定高度，零布局跳动） -->
+      <!-- 第二行：常驻移组控件（始终显示同一结构，勾选前后零跳动） -->
       <div class="tbl-bar-tags">
-        <template v-if="selected.size > 0">
-          <span class="tag-editor-label">移入分组：</span>
-          <select class="select" v-model="batchGroup" :disabled="classifying">
-            <option value="">选择目标分组…</option>
-            <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
-          </select>
-          <button class="btn btn-primary btn-sm" :disabled="classifying" @click="applyBatchGroup">应用</button>
-        </template>
-        <span v-else class="tag-editor-label" style="color:var(--text-faint)">勾选文档后，可在这里批量移入 / 移出分组</span>
+        <span class="tag-editor-label">移入分组：</span>
+        <select class="select" v-model="batchGroup" :disabled="selected.size === 0 || classifying" style="width:160px">
+          <option value="">选择目标分组…</option>
+          <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+        </select>
+        <button class="btn btn-primary btn-sm" :disabled="selected.size === 0 || classifying" @click="applyBatchGroup">应用</button>
+        <span class="tag-editor-label" style="color:var(--text-faint)">{{ selected.size === 0 ? "勾选文档后可批量操作" : `已选 ${selected.size} 篇` }}</span>
       </div>
 
       <!-- 智能分类确认面板：AI 建议分组 → 用户改组名/移除 → 一键建组归档 -->
@@ -669,7 +670,16 @@ function onDrop(e: DragEvent) {
 </template>
 
 <style scoped>
-.group-nav { display: flex; gap: 6px; align-items: center; margin: 4px 0 12px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
+/* 组导航外层容器：创建分组悬浮面板的定位锚点；上边距加大（离搜索栏远几个像素） */
+.group-nav-wrap { position: relative; margin: 12px 0 8px; }
+.group-nav { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
+/* 创建分组悬浮面板：absolute 不占 flow，导航布局零跳动；面板覆盖下方内容可接受（带底色阴影） */
+.g-create-panel {
+  position: absolute; top: calc(100% + 2px); left: 0; z-index: 20;
+  display: flex; gap: 6px; align-items: center;
+  background: var(--surface-1); border: 1px solid var(--border-strong); border-radius: 10px;
+  padding: 8px 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
 /* 分组多时横向滚动：子项禁止压缩，名称完整显示不换行 */
 .group-nav .chip, .group-nav .g-chip-wrap, .group-nav .btn { flex-shrink: 0; white-space: nowrap; }
 .chip {
@@ -678,12 +688,12 @@ function onDrop(e: DragEvent) {
 }
 .chip.on { background: var(--accent); color: #0b0e13; border-color: var(--accent); }
 .g-chip-wrap { position: relative; display: inline-flex; }
-/* 删除入口：chip 右上角小 pill「删除」；确认态原位变红底白字「确认」（absolute 不占布局，零跳动） */
+/* 删除入口：chip 右上角小 pill「删除」（红字明显）；确认态原位红底白字「确认」（absolute 不占布局，零跳动） */
 .g-del {
   position: absolute; right: 0; top: -8px; height: 17px; line-height: 15px;
-  border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1);
-  color: var(--text-muted); font-size: 10.5px; padding: 0 6px; cursor: pointer;
-  text-align: center; white-space: nowrap; z-index: 2;
+  border-radius: 999px; border: 1px solid var(--red); background: rgba(244, 67, 54, 0.08);
+  color: var(--red); font-size: 10.5px; padding: 0 6px; cursor: pointer;
+  text-align: center; white-space: nowrap; z-index: 2; font-weight: 600;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
 .g-del.confirm { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 700; }
