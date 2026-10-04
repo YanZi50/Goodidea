@@ -182,3 +182,8 @@
 - **web 预览限制说明**：浏览器预览无插件仍受 CORS 约束，接不通的端点请在桌面应用内使用（@2d37721）
 - 验证：vue-tsc + vite build 全绿（399 模块）；cargo check Finished；本机实测 aigd.top `/v1/models` 与 `/v1/chat/completions` 直连均 200（key 有效、gpt-5.5 存在、响应无 ACAO 头=此前拦截源）；真机测试待确认（@2d37721）
 - **已知外部事项（非应用缺陷）**：实测 aigd.top 当前返回 `403 insufficient balance`——该中转账号余额不足，需充值后才能使用；充值后请重新点「测试」验证
+
+### Fixed（消耗统计恒为 0，BUG-016）
+- **计费按模型名匹配**：生成/分析消耗改传 `cfg.model`（模型名，如 deepseek-v4-flash）而非档案 label（如 Deepseek）——此前价格表按模型名 `includes` 匹配永远不命中，单价算 0、统计不累计；DeepSeek 官网有消耗而应用内恒为 ¥0.00（@643b2fc）
+- **统计页未收录提示**：消耗统计「按模型」列表对未收录单价的模型显示「未收录单价（可在设置→价格表添加）」替代误导性的 ¥0/1M（@643b2fc）
+- 验证：vue-tsc + vite build 全绿（409 模块）；匹配逻辑代码审查（priceFor includes 对 deepseek-v4-flash 命中），真机消耗累计待确认（@待回填）

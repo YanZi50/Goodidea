@@ -188,7 +188,7 @@
 ## BUG-016：消耗统计恒为 0——计费按档案 label 匹配价格表，与模型名永远不命中
 
 - **日期**：2026-10-04
-- **关联 commit**：@待回填
+- **关联 commit**：@643b2fc
 - **所属模块**：消耗统计（src/lib/ai.ts priceFor + StudioView/AnalysisView/UsageView 调用点）
 - **症状**：真实调用模型后 DeepSeek 官网有消耗，应用内「今日消耗 ¥0.00」、消耗统计页按模型无金额；反复生成也不累计。
 - **根因**：`calcCost(modelLabel, usage)` 的 `priceFor` 用 `modelLabel.includes(priceKey)` 匹配价格表（PRICE_TABLE / billing_rules，key 为**模型名**如 deepseek-v4-flash）；而三个调用点传入的是**档案 label**（如 "Deepseek"）——档案名与价格表 key 无包含关系，永不命中 → 返回 `{in:0,out:0}` → amount 恒 0，`addCost` 累加 0。多档案体系引入 label 后调用点未同步改传模型名。
