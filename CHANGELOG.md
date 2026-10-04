@@ -151,6 +151,7 @@
 
 ### Fixed（备份还原失败 + 历史可见性 + 模型切换联动）
 - **备份还原修复**：还原改显式 id 插入（SQLite AUTOINCREMENT 允许显式主键，chunks 沿用备份 doc_id），彻底规避 tauri-plugin-sql 连接池下 `last_insert_rowid()` 跨连接取错导致的分块错位/还原失败；还原解析增加 JSON BOM 容错（@18d7262，BUG-014 见 BUGS.md）
+- **还原根治（第二轮）**：真机仍失败（前端事务在连接池下跨连接失效且吞错）→ 还原整体下沉 Rust：新增 `import_backup` 命令（rusqlite 单连接，`BEGIN IMMEDIATE → DELETE/INSERT → COMMIT`，失败整体 ROLLBACK），任一步失败返回具体错误并在 toast 透传真实原因，不再误报「数据库不可用」（@6ab1748，BUG-014 根治）
 - **分析历史入口**：智能分析页新增「历史记录」面板（同生成工作台模式）——列出最近 10 条分析历史，点击回填结果、单条可删；分析/生成两类历史现在都在各自工作台可见（@305e4af）
 - **模型切换即时联动**：顶栏切换模型后通过 onModelSwitched 事件广播，设置页档案列表与当前高亮立即刷新，无需手动刷新（@764484b）
 - 验证：vue-tsc + vite build 全绿（399 模块）；Edge 直连 #analysis 截图确认「历史记录」按钮就位；还原逻辑代码审查确认显式 id 无空洞错位，真机还原与联动待确认（@63cf6dd）
