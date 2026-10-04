@@ -9,6 +9,7 @@ import {
   addCost,
 } from "../lib/ai";
 import { onUseHotspot } from "../lib/bus";
+import { SOURCES, fetchHotlist, type HotItem } from "../lib/hotlist";
 import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, listSkills, listGroups, fetchGroupChunks, type SkillRow, type GroupRow, type HistoryRow } from "../lib/db";
 import { checkDuplicates, type DupHit } from "../lib/similarity";
 import { validateOutput, type ValCheck } from "../lib/validate";
@@ -19,10 +20,13 @@ const skillList = ref<SkillRow[]>([]); // 风格模板（db skills，v7）：名
 const groupList = ref<GroupRow[]>([]); // 文档库分组（引用分组注入素材）
 const activeGroups = ref(new Set<number>()); // 选中的分组 id
 const materialChips = ["价格表 v3", "名表回收话术", "包袋验货要点", "风格库·强节奏口播"];
-const hotspotChips = ["# 名表回收新趋势", "# 二手奢侈品行情", "不使用热点"];
+const hotSource = ref("douyinHot"); // 热榜平台（实时）
+const hotItems = ref<HotItem[]>([]); // 实时热榜条目
+const hotLoading = ref(false);
+const hotError = ref("");
 const activeSkills = ref(new Set<string>());
 const activeMats = ref(new Set(["价格表 v3"]));
-const activeHot = ref("# 名表回收新趋势");
+const activeHot = ref("不使用热点"); // 选中热点（默认不用；热点页「接入生成」会置为 # 主题）
 
 /** 加载风格模板（首次播种内置 4 个；过滤已删除的旧选中名，避免草稿/历史回填报错） */
 async function loadSkills() {
@@ -44,6 +48,29 @@ function toggleGroup(id: number) {
   if (s.has(id)) s.delete(id);
   else s.add(id);
   activeGroups.value = s;
+}
+
+/** 拉取实时热榜（当前平台 Top 12；行业相关条目带标记） */
+async function loadHot() {
+  hotLoading.value = true;
+  hotError.value = "";
+  try {
+    const items = await fetchHotlist(hotSource.value);
+    hotItems.value = items.slice(0, 12);
+    // 之前选中的热点不在新列表且不是自定义/不使用 → 回退「不使用热点」
+    if (
+      activeHot.value !== "不使用热点" &&
+      !activeHot.value.startsWith("# ") &&
+      !hotItems.value.some((i) => i.title === activeHot.value)
+    ) {
+      activeHot.value = "不使用热点";
+    }
+  } catch (err) {
+    hotError.value = err instanceof Error ? err.message : String(err);
+    hotItems.value = [];
+  } finally {
+    hotLoading.value = false;
+  }
 }
 
 const request = ref(
@@ -182,6 +209,7 @@ function restoreDraft() {
 onMounted(() => {
   void loadSkills();
   void loadGroups();
+  void loadHot();
   // 热点页「接入生成」→ 设置热点参考并预填需求（需求为空时）
   const off = onUseHotspot((topic) => {
     activeHot.value = `# ${topic}`;
@@ -453,12 +481,25 @@ function copyShots() {
         <div style="font-size:12px;color:var(--text-faint);margin-top:4px">与「关联素材」关键词检索可同时生效；组内容与需求一起注入，生成以组内事实为准</div>
       </div>
       <div class="field">
-        <label class="label">热点参考（可选）</label>
-        <div class="chips">
-          <button v-for="c in hotspotChips" :key="c" class="chip" :class="{ on: activeHot === c }" @click="activeHot = c">{{ c }}</button>
-          <button v-if="!hotspotChips.includes(activeHot)" class="chip on" :title="activeHot" @click="activeHot = '不使用热点'">{{ activeHot }} ×</button>
+        <label class="label">热点参考（实时热榜）</label>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+          <select class="select" v-model="hotSource" @change="loadHot" style="width:132px" title="切换平台自动刷新">
+            <option v-for="s in SOURCES" :key="s.id" :value="s.id">{{ s.label }}</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" @click="loadHot" :disabled="hotLoading">{{ hotLoading ? "刷新中…" : "刷新" }}</button>
+          <span style="font-size:12px;color:var(--text-faint)">点选条目作为参考注入生成</span>
         </div>
-        <div style="font-size:12px;color:var(--text-faint);margin-top:4px">热点页点条目「生成」图标可直接接入此处</div>
+        <div class="chips">
+          <button v-for="it in hotItems" :key="it.rank + it.title" class="chip" :class="{ on: activeHot === it.title, rel: it.related }" @click="activeHot = it.title" :title="`热度 ${it.hot}${it.related ? ' · 行业相关' : ''}`">{{ it.title }}</button>
+          <button class="chip" :class="{ on: activeHot === '不使用热点' }" @click="activeHot = '不使用热点'">不使用热点</button>
+          <button v-if="activeHot.startsWith('# ') && !hotItems.some((i) => i.title === activeHot.slice(2))" class="chip on" :title="activeHot" @click="activeHot = '不使用热点'">{{ activeHot }} ×</button>
+        </div>
+        <div style="font-size:12px;margin-top:4px" :style="{ color: hotError ? 'var(--red)' : 'var(--text-faint)' }">
+          <template v-if="hotLoading">正在拉取热榜…</template>
+          <template v-else-if="hotError">热榜拉取失败：{{ hotError }}（请检查网络后刷新）</template>
+          <template v-else-if="hotItems.length === 0">暂无热榜数据</template>
+          <template v-else>行业相关条目自动高亮标记；热点页点条目「生成」图标也可直接接入此处</template>
+        </div>
       </div>
       <div class="field">
         <label class="label">生成模式</label>
@@ -657,4 +698,7 @@ function copyShots() {
 .dup-score { font-weight: 700; color: var(--text); font-size: 14px; }
 .dup-src { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dup-snippet { font-size: 12px; color: var(--text-faint); margin-top: 3px; line-height: 1.5; }
+/* 实时热榜：行业相关条目高亮标记（区别于选中态） */
+.chip.rel { border-color: var(--accent); color: var(--accent); }
+.chip.rel.on { background: var(--accent); color: #0b0e13; }
 </style>
