@@ -415,5 +415,5 @@
 - 验证：vue-tsc + vite build 全绿（409 模块）（@51efc82）
 
 ### Chore（桌面分发包）
-- **打包配置调整**：bundle targets `all` → `["app"]`，产出绿色版 exe（10.3MB，免安装双击即用，zip 4.8MB）；MSI/NSIS 安装包因 GitHub 下载 WiX 超时受阻（tauri CLI 无条件下载 WiX，本地预置工具不识别），待网络可通后切回 targets 重打（@待回填）
+- **打包配置调整**：bundle targets `all` → `["app"]`，产出绿色版 exe（10.3MB，免安装双击即用，zip 4.8MB）；MSI/NSIS 安装包因 GitHub 下载 WiX 超时受阻（tauri CLI 无条件下载 WiX，本地预置工具不识别），待网络可通后切回 targets 重打（@744bbe3）
 - 验证：`npm run tauri build` EXIT=0，release exe 已产出并压缩为 Goodidea-桌面版-v0.1.0.zip（@待回填）
