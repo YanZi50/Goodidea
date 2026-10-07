@@ -332,3 +332,9 @@
 - **复制结果**：分析完成/回填历史后一键复制纯文本（渲染后 innerText，无 Markdown 符号）（@5899694）
 - **导出 .md**：保存对话框导出为 Markdown 文件（保留结构，供二次编辑/存档）（@5899694）
 - 验证：vue-tsc + vite build 全绿（409 模块）（@5899694）
+
+### Added（图片型脚本 OCR，解锁 47 篇无文本文档）
+- **OCR 通道**：Rust `extract_docx_images` 解包 docx 的 `word/media/` 提取内嵌图片（zip + base64，单图限 12MB）→ 前端视觉模型 `chat/completions` 逐图识别 → 文本按空行分块写回 chunks（@11d6087）
+- **设置页「OCR 视觉模型」**：模型档案下拉（app_settings `ocr_profile_id`），保存随关键词库一并提交并广播；需选支持图片输入的模型（gpt-4o / qwen-vl 等，DeepSeek 无视觉不可用）（@11d6087）
+- **文档库「OCR 图片型」按钮**：多选 docx → 按文件名匹配库中文档 → 回写（同名不存在则提示先导入）；进度显示「OCR i/N」；成功后该文档可分析/分类/全文检索（@11d6087）
+- 验证：vue-tsc + vite build 全绿（409 模块）；cargo check 通过（新增 zip + base64 依赖）（@11d6087）
