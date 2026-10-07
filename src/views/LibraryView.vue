@@ -517,7 +517,7 @@ async function startClassify() {
   classifyOpen.value = true;
   const parts = [`分类完成：${out.length} 篇成功`];
   if (bad > 0) parts.push(`${bad} 篇失败`);
-  if (skipped > 0) parts.push(`${skipped} 篇图片型/空文档跳过（OCR 二期可处理）`);
+  if (skipped > 0) parts.push(`${skipped} 篇图片型/空文档跳过（可到设置配置 OCR 视觉模型后，用「OCR 图片型」解锁）`);
   toast(parts.join("，") + (bad === 0 && skipped === 0 ? "。" : "。"));
 }
 

@@ -1,6 +1,5 @@
 // 文档摄取管线：读取 → 哈希去重 → 分块 → 入库
-// 一期格式：.txt / .md（原生读取）、.docx（mammoth 解析）
-// 二期：.pdf / 图片 OCR（非一期范围）
+// 支持格式：.txt / .md（原生读取）、.docx（mammoth 提取文本层；图片型 docx 由文档库「OCR 图片型」解锁）
 import mammoth from "mammoth";
 import {
   findDocumentByHash,
@@ -19,7 +18,7 @@ export async function readFileText(file: File): Promise<string> {
   if (ext === "txt" || ext === "md" || ext === "markdown" || ext === "text") {
     return await file.text();
   }
-  throw new Error(`暂不支持 .${ext} 格式（一期仅 .txt / .md / .docx）`);
+  throw new Error(`暂不支持 .${ext} 格式（当前支持 .txt / .md / .docx）`);
 }
 
 /** SHA-256 内容哈希（去重键） */
@@ -125,7 +124,7 @@ export async function ingestFile(
   }
 }
 
-/** 粘贴文本入库（二期落地）：filename 需带扩展名决定类型标签 */
+/** 粘贴文本入库：filename 需带扩展名决定类型标签 */
 export async function ingestText(
   text: string,
   filename: string,
