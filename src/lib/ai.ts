@@ -201,11 +201,12 @@ export const PRICE_TABLE: Record<string, { in: number; out: number }> = {
 // 动态价格表：db（billing_rules）加载后覆盖常量；未加载时用常量
 let dynamicPrice: Record<string, { in: number; out: number }> | null = null;
 
-/** 从 db 重载价格表（设置页保存后 / 应用启动时调用；web 预览或 db 不可用时回退常量） */
+/** 从 db 重载价格表（设置页保存后 / 应用启动时调用；web 预览或 db 不可用时回退常量）
+ *  注意：billing_rules 为空表（用户未维护）时必须回退内置常量价格表——否则空表覆盖常量导致所有模型单价 0、消耗恒为 ¥0.00 */
 export async function reloadPriceTable(): Promise<void> {
   try {
     const rules = await listBillingRules();
-    if (rules === null) {
+    if (rules === null || rules.length === 0) {
       dynamicPrice = null;
       return;
     }
