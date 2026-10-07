@@ -473,6 +473,28 @@ export async function setDocumentsGroup(ids: number[], groupId: number | null): 
   await d.execute(`UPDATE documents SET group_id = $${ids.length + 1} WHERE id IN (${ph})`, [...ids, groupId]);
 }
 
+/** 重命名文档（内容块不变；同名新文件导入仍按内容哈希去重，重命名不影响去重） */
+export async function renameDocument(id: number, filename: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE documents SET filename = $1 WHERE id = $2", [filename, id]);
+}
+
+/** 全文搜索：返回内容块命中关键词的文档 id 集合（文件名匹配在前端做；LIKE 对中文可用，数据量小无需 FTS） */
+export async function searchChunkDocIds(keyword: string): Promise<number[]> {
+  if (!isTauriRuntime() || !keyword.trim()) return [];
+  try {
+    const d = await getDb();
+    const rows = await d.select<{ doc_id: number }[]>(
+      "SELECT DISTINCT doc_id FROM chunks WHERE content LIKE $1",
+      [`%${keyword.trim()}%`]
+    );
+    return rows.map((r) => r.doc_id);
+  } catch (err) {
+    console.error("[db] searchChunkDocIds failed", err);
+    return [];
+  }
+}
+
 /** 全库内容（可选按文档范围；按文档/块序拼接，limit 截断防止超长 prompt） */
 export async function listAllChunkContent(limit = 60, docIds?: number[]): Promise<string[]> {
   if (!isTauriRuntime()) return [];

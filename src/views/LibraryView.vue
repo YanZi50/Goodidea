@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, inject, onMounted } from "vue";
+import { ref, computed, watch, inject, onMounted } from "vue";
 import type { DocumentRow, GroupRow } from "../lib/db";
 import {
   listDocuments,
@@ -12,6 +12,8 @@ import {
   deleteGroup,
   setDocumentGroup,
   setDocumentsGroup,
+  renameDocument,
+  searchChunkDocIds,
   listAllChunkContent,
 } from "../lib/db";
 import { ingestFile, ingestText } from "../lib/ingest";
@@ -35,6 +37,7 @@ const creatingGroup = ref(false);
 const newGroupName = ref("");
 const editingId = ref<number | null>(null); // 行内移组展开的文档 id
 const editGroupId = ref<number | "">(""); // "" = 未分组（select 原生空值，避免 null 绑定歧义）
+const editName = ref(""); // 行内重命名（与移组同面板，一次保存）
 
 // ---- 批量选择 ----
 const selected = ref<Set<number>>(new Set());
@@ -141,10 +144,21 @@ function setSort(k: "filename" | "file_type" | "size" | "created_at") {
   }
 }
 
+// 全文搜索：内容块命中集合（文件名匹配前端同步做，内容命中异步查）
+const contentHitIds = ref<Set<number>>(new Set());
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+watch(keyword, (q) => {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(async () => {
+    const ids = await searchChunkDocIds(q);
+    contentHitIds.value = new Set(ids);
+  }, 250);
+});
+
 const filtered = computed(() => {
   let list = docs.value;
   const q = keyword.value.trim().toLowerCase();
-  if (q) list = list.filter((d) => d.filename.toLowerCase().includes(q));
+  if (q) list = list.filter((d) => d.filename.toLowerCase().includes(q) || contentHitIds.value.has(d.id));
   if (groupFilter.value === "none") list = list.filter((d) => d.group_id === null);
   else if (typeof groupFilter.value === "number") list = list.filter((d) => d.group_id === groupFilter.value);
   const dir = sortDir.value;
@@ -242,17 +256,28 @@ async function removeGroup(g: GroupRow) {
 function openEditor(d: DocumentRow) {
   editingId.value = d.id;
   editGroupId.value = d.group_id ?? "";
+  editName.value = d.filename;
 }
 
 async function saveEditor(d: DocumentRow) {
   const gid = editGroupId.value === "" ? null : editGroupId.value;
   try {
-    await setDocumentGroup(d.id, gid);
-    toast(gid === null ? `已移出分组：${d.filename}` : `已移入「${groupName(gid)}」：${d.filename}`);
+    const newName = editName.value.trim();
+    if (newName && newName !== d.filename) {
+      await renameDocument(d.id, newName);
+    }
+    if (gid !== (d.group_id ?? null)) {
+      await setDocumentGroup(d.id, gid);
+    }
+    toast(
+      [newName && newName !== d.filename ? `已重命名：${d.filename} → ${newName}` : "", gid !== (d.group_id ?? null) ? `已移${gid === null ? "出分组" : `入「${groupName(gid)}」`}` : ""]
+        .filter(Boolean)
+        .join("；") || "未作修改"
+    );
     editingId.value = null;
     await refresh();
   } catch (err) {
-    toast(`移组失败：${err instanceof Error ? err.message : String(err)}`);
+    toast(`保存失败：${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -510,7 +535,7 @@ function onDrop(e: DragEvent) {
     <div class="toolbar">
       <div class="search">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>
-        <input class="input" v-model="keyword" placeholder="搜索文件名…" />
+        <input class="input" v-model="keyword" placeholder="搜索文件名与内容…" />
       </div>
       <select class="select" v-model="targetGroup" style="width:150px" title="导入时直接归入所选分组">
         <option value="">导入到：未分组</option>
@@ -645,8 +670,10 @@ function onDrop(e: DragEvent) {
             <td></td>
             <td colspan="6">
               <div class="tag-editor">
+                <span class="tag-editor-label">文件名：</span>
+                <input class="input" v-model="editName" style="width:220px" placeholder="重命名（回车保存）" @keydown.enter="saveEditor(filtered.find((d) => d.id === editingId)!)" />
                 <span class="tag-editor-label">归属组：</span>
-                <select class="select" v-model="editGroupId" style="width:180px">
+                <select class="select" v-model="editGroupId" style="width:160px">
                   <option value="">未分组</option>
                   <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
                 </select>
