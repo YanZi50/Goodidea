@@ -317,3 +317,8 @@
 ### Changed（还原前自动快照，保护数据）
 - **还原前自动快照**：点「还原备份」选中文件后、正式还原前，自动把当前库全量导出为快照（Rust `save_snapshot` 命令 → 应用数据目录 `goodidea-snapshots/goodidea-snapshot-时间戳.json`），还原失败或反悔可找回；快照失败不阻断还原（@f062139）
 - 验证：vue-tsc + vite build 全绿（409 模块）；cargo check 通过（新增 chrono 依赖）（@f062139）
+
+### Added（全文搜索 + 重命名，维护型优化）
+- **全文搜索**：搜索框升级为「文件名 + 内容」双通道——内容块 LIKE 命中（防抖 250ms，chunks 表 DISTINCT doc_id），找话术/价格不再只能凭文件名（@b5e5ea8）
+- **行内重命名**：行内编辑面板（编辑图标）现可同时改文件名 + 归属组，一次保存；重命名不影响内容哈希去重（@b5e5ea8）
+- 验证：vue-tsc + vite build 全绿（409 模块）（@b5e5ea8）
