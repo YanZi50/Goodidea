@@ -162,6 +162,7 @@ table.tbl tbody tr:hover{background:var(--surface-2)}
 .fname{display:flex;align-items:center;gap:9px;font-weight:600;overflow:hidden}
 .fname svg{width:16px;height:16px;flex-shrink:0;stroke:var(--blue);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .fname .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fname .hit-badge{flex-shrink:0;font-size:10.5px;font-weight:500;color:var(--blue);border:1px solid color-mix(in srgb,var(--blue) 45%,transparent);border-radius:6px;padding:1px 6px;background:color-mix(in srgb,var(--blue) 12%,transparent)}
 .fmeta{font-size:11.5px;color:var(--text-faint);margin-top:1px}
 .row-actions{display:flex;gap:4px;justify-content:flex-end;opacity:0;transition:opacity .15s}
 table.tbl tr:hover .row-actions{opacity:1}

@@ -226,6 +226,7 @@ function setSort(k: "filename" | "file_type" | "size" | "created_at") {
 const contentHitIds = ref<Set<number>>(new Set());
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchSeq = 0; // 竞态守卫：快速改字时旧查询晚返回会覆盖新结果（「搜索不准」根因）
+const searchQ = computed(() => keyword.value.trim().toLowerCase());
 watch(keyword, (q) => {
   if (searchTimer) clearTimeout(searchTimer);
   contentHitIds.value = new Set(); // 立即清空旧命中，避免残留干扰（文件名命中同步显示）
@@ -240,7 +241,7 @@ watch(keyword, (q) => {
 
 const filtered = computed(() => {
   let list = docs.value;
-  const q = keyword.value.trim().toLowerCase();
+  const q = searchQ.value;
   if (q) list = list.filter((d) => d.filename.toLowerCase().includes(q) || contentHitIds.value.has(d.id));
   if (groupFilter.value === "none") list = list.filter((d) => d.group_id === null);
   else if (typeof groupFilter.value === "number") list = list.filter((d) => d.group_id === groupFilter.value);
@@ -748,7 +749,8 @@ function onDrop(e: DragEvent) {
             <td>
               <div class="fname">
                 <svg viewBox="0 0 24 24" :style="{ stroke: fileColor(d.file_type) }"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg>
-                <span class="t">{{ d.filename }}</span>
+                <span class="t" :title="d.filename">{{ d.filename }}</span>
+                <span v-if="searchQ && !d.filename.toLowerCase().includes(searchQ) && contentHitIds.has(d.id)" class="hit-badge" title="文件名不含关键词，命中文档正文内容">内容命中</span>
               </div>
             </td>
             <td><span class="tag">{{ d.file_type }}</span></td>
