@@ -8,7 +8,7 @@ import {
   calcCost,
   addCost,
 } from "../lib/ai";
-import { onUseHotspot } from "../lib/bus";
+import { onUseHotspot, onDataChanged } from "../lib/bus";
 import { SOURCES, fetchHotlist, type HotItem } from "../lib/hotlist";
 import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, listSkills, listGroups, fetchGroupChunks, type SkillRow, type GroupRow, type HistoryRow } from "../lib/db";
 import { checkDuplicates, type DupHit } from "../lib/similarity";
@@ -210,6 +210,9 @@ onMounted(() => {
   void loadSkills();
   void loadGroups();
   void loadHot();
+  // 设置页新增/编辑/删除 Skill 模板后实时同步（同文档库广播通道，无需手动刷新）
+  const offData = onDataChanged(() => void loadSkills());
+  onUnmounted(offData);
   // 热点页「接入生成」→ 设置热点参考并预填需求（需求为空时）
   const off = onUseHotspot((topic) => {
     activeHot.value = `# ${topic}`;

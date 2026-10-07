@@ -82,6 +82,7 @@ async function skillSave() {
   }
   skillForm.value = null;
   await loadSkills();
+  emitDataChanged(); // 生成工作台等消费方实时刷新（不手动刷新）
 }
 async function skillDelete(s: SkillRow) {
   if (skillDelId.value !== s.id) {
@@ -93,6 +94,7 @@ async function skillDelete(s: SkillRow) {
   skillDelId.value = null;
   toast(`已删除「${s.name}」`);
   await loadSkills();
+  emitDataChanged(); // 生成工作台等消费方实时刷新（不手动刷新）
 }
 async function saveIndustry() {
   await setAppSetting("industry_context", industry.value.trim());
