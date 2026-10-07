@@ -2,7 +2,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from "vue";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { listDocuments, countChunks, listAllChunkContent, listGroups, recordHistory, listHistories, deleteHistory, isTauriRuntime, loadIndustryContext, type HistoryRow } from "../lib/db";
+import { listDocuments, countChunks, listAllChunkContent, listGroups, recordHistory, listHistories, deleteHistory, isTauriRuntime, loadIndustryContext, loadAnalysisChunkLimit, type HistoryRow } from "../lib/db";
 import { onDataChanged, onAnalyzeDocRequest } from "../lib/bus";
 import {
   loadActiveConfig,
@@ -16,6 +16,8 @@ const toast = inject("toast") as (msg: string) => void;
 
 const docCount = ref(0);
 const chunkCount = ref(0);
+/** 分析截取块数上限（设置页可改，默认 120）：KPI 卡片展示「前 N 块参与分析」 */
+const analysisLimit = ref(120);
 const today = ref(0);
 const modelLabel = ref("");
 const analyzing = ref(false);
@@ -89,6 +91,7 @@ async function refreshScopeStats() {
 
 onMounted(() => {
   refresh();
+  void loadAnalysisChunkLimit().then((n) => (analysisLimit.value = n));
   // 文档库数据变更（建组/删组/移组/导入/删除）实时同步本页分组与统计，无需手动刷新
   const off = onDataChanged(() => void refresh());
   // 文档库行内「分析」→ 本页单篇分析
@@ -200,7 +203,7 @@ async function runAnalysis() {
     toast("该文档没有可分析的内容（可能是空文件）");
     return;
   }
-  const chunks = await listAllChunkContent(60, ids);
+  const chunks = await listAllChunkContent(analysisLimit.value, ids);
   if (chunks.length === 0) {
     // 区分三种空因，避免误导（单篇无内容 ≠ 知识库为空）
     if (docScope.value !== null) toast("该文档没有可分析的内容（可能是图片型 docx 或空文件，OCR 二期支持）");
@@ -220,7 +223,7 @@ async function runAnalysis() {
     "2) 指出问题：内部矛盾、信息缺口、低质/冗余段落、改进建议，逐条列出并标注优先级。",
     "使用 Markdown 结构输出：## 核心要点 / ## 指出问题。",
   ].join("\n");
-  const prompt = `以下是知识库内容（范围：${scopeLabel.value}${incrOnly.value ? "（仅新增）" : ""}，截取前 60 块）：\n\n${chunks.join("\n---\n")}`;
+  const prompt = `以下是知识库内容（范围：${scopeLabel.value}${incrOnly.value ? "（仅新增）" : ""}，截取前 ${analysisLimit.value} 块）：\n\n${chunks.join("\n---\n")}`;
 
   try {
     const res = await runGeneration(cfg, system, prompt, abortCtrl.value?.signal);
@@ -346,7 +349,7 @@ function histTime(iso: string): string {
   <div>
     <div class="kpis">
       <div class="kpi"><div class="k">范围内文档</div><div class="v">{{ docCount }}<small>篇</small></div><div class="d">{{ scopeLabel }}</div></div>
-      <div class="kpi"><div class="k">覆盖文本</div><div class="v">{{ chunkCount }}<small>块</small></div><div class="d">前 60 块参与分析</div></div>
+      <div class="kpi"><div class="k">覆盖文本</div><div class="v">{{ chunkCount }}<small>块</small></div><div class="d">前 {{ analysisLimit }} 块参与分析</div></div>
       <div class="kpi"><div class="k">今日消耗</div><div class="v">¥{{ today.toFixed(2) }}</div><div class="d">分析 + 生成合计</div></div>
       <div class="kpi"><div class="k">当前模型</div><div class="v" style="font-size:17px">{{ modelLabel || "未配置" }}</div><div class="d" :style="{ color: modelLabel ? 'var(--green)' : 'var(--red)' }">{{ modelLabel ? "已就绪" : "去设置页配置" }}</div></div>
     </div>

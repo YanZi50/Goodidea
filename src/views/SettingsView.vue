@@ -16,6 +16,7 @@ import {
   importBackupData,
   isTauriRuntime,
   loadIndustryContext,
+  loadAnalysisChunkLimit,
   setAppSetting,
   getAppSetting,
   loadMaterialKeywords,
@@ -35,14 +36,18 @@ import { PRICE_TABLE, reloadPriceTable, testConnection } from "../lib/ai";
 
 const toast = inject("toast") as (msg: string) => void;
 
-// ---- 生成偏好（行业背景，v6 app_settings） ----
+// ---- 生成偏好（行业背景 + 分析深度，app_settings） ----
 const industry = ref("");
 const industryLoaded = ref(false);
 const industrySaved = ref(false);
+/** 智能分析截取块数上限：默认 120，范围 20–300 */
+const analysisLimit = ref(120);
+const analysisLimitSaved = ref(false);
 
 async function loadIndustry() {
   industry.value = await loadIndustryContext();
   industryLoaded.value = true;
+  analysisLimit.value = await loadAnalysisChunkLimit();
 }
 /** 恢复默认：清空自定义，回退内置文案 */
 async function resetIndustry() {
@@ -133,6 +138,16 @@ async function saveIndustry() {
   industrySaved.value = true;
   setTimeout(() => (industrySaved.value = false), 2000);
   toast("行业背景已保存，下次生成/分析生效");
+}
+
+/** 保存分析深度：clamp 20–300，下次分析生效（KPI 卡片「前 N 块」实时跟随本值） */
+async function saveAnalysisLimit() {
+  const n = Math.min(300, Math.max(20, Math.round(Number(analysisLimit.value) || 120)));
+  analysisLimit.value = n;
+  await setAppSetting("analysis_chunk_limit", String(n));
+  analysisLimitSaved.value = true;
+  setTimeout(() => (analysisLimitSaved.value = false), 2000);
+  toast(`分析深度已保存（前 ${n} 块），下次分析生效`);
 }
 
 // ---- 数据存储状态 ----
@@ -509,6 +524,18 @@ async function priceSave() {
       <div class="field" style="margin-top:10px">
         <label class="label">行业/服务背景（生成与分析的默认角色）</label>
         <textarea class="textarea" v-model="industry" rows="4" placeholder="例：我从事奢侈品回收行业（名表、包袋等全品类），主打高价回收、先打款后收货……"></textarea>
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label class="label">分析深度（智能分析截取文本块数）</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input class="input" type="number" min="20" max="300" step="10" v-model.number="analysisLimit" style="width:120px" />
+          <span style="font-size:12px;color:var(--text-faint)">范围 20–300 块，默认 120</span>
+          <button class="btn btn-ghost btn-sm" @click="saveAnalysisLimit">{{ analysisLimitSaved ? "已保存 ✓" : "保存" }}</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:6px;line-height:1.6">
+          每块 ≈ 1500 字（约 830 token）；120 块 ≈ 10 万 token，已接近部分模型上下文上限。块数越多分析覆盖越全，
+          但超出模型窗口或费用越高——内容超过上限时只分析前 N 块，超出部分不参与。
+        </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn btn-primary btn-sm" @click="saveIndustry">{{ industrySaved ? "已保存 ✓" : "保存行业背景" }}</button>

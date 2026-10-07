@@ -69,6 +69,15 @@ export async function loadIndustryContext(): Promise<string> {
   return v && v.trim() ? v : DEFAULT_INDUSTRY_CONTEXT;
 }
 
+/** 分析截取块数上限：默认 120（约 10 万 token），范围 20–300；
+ *  每块 ≤1500 字符（≈830 token），超出上限的内容不参与本次分析；设置页可改，下次分析生效 */
+export async function loadAnalysisChunkLimit(): Promise<number> {
+  const v = await getAppSetting("analysis_chunk_limit");
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 120;
+  return Math.min(300, Math.max(20, Math.round(n)));
+}
+
 // ---- 关键词库（app_settings，按行存储）：关联素材关键词 / 行业热点关键词，用户可自定义 ----
 /** 默认关联素材关键词（奢侈品回收行业旧值；设置页可整体替换，生成工作台实时同步） */
 export const DEFAULT_MATERIAL_KEYWORDS = ["价格表 v3", "名表回收话术", "包袋验货要点", "风格库·强节奏口播"];
