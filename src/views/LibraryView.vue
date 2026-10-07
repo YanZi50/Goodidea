@@ -353,6 +353,7 @@ async function startClassify() {
     toast("请先在设置中配置并启用模型档案");
     return;
   }
+  const activeCfg = cfg; // 闭包内保留非空类型（loadActiveConfig 返回联合类型）
   let targets: { id: number; filename: string }[];
   if (classifyScope.value === "selected") {
     targets = [...selected.value].map((id) => ({ id, filename: docs.value.find((d) => d.id === id)?.filename ?? `文档${id}` }));
@@ -376,36 +377,56 @@ async function startClassify() {
     "规则：只输出类别名本身，不输出标点、引号、序号或任何解释；同一类别的文档输出完全相同的类别名。",
   ].join("\n");
   const out: ClassifyItem[] = [];
+  let ok = 0;
   let bad = 0;
-  for (let i = 0; i < targets.length; i++) {
-    classifyProgress.value = `${i + 1}/${targets.length}`;
-    try {
-      const chunks = await listAllChunkContent(3, [targets[i].id]);
-      const body = chunks.join("\n").slice(0, 1800) || "（空文档）";
-      const res = await runGeneration(cfg, system, `文档《${targets[i].filename}》内容：\n${body}`);
-      const cat = parseCategory(res.text);
-      if (!cat) {
+  let skipped = 0; // 无文本（图片型/空）文档：不浪费 token，直接跳过并在完成提示中说明
+  // 并发 3：逐篇串行太慢（87 篇约几分钟），并发显著提速；结果顺序不要求
+  const CONC = 3;
+  let cursor = 0;
+  let done = 0;
+  async function worker() {
+    while (cursor < targets.length) {
+      const i = cursor++;
+      const t = targets[i];
+      try {
+        const chunks = await listAllChunkContent(3, [t.id]);
+        if (chunks.length === 0) {
+          skipped++;
+          done++;
+          continue; // 图片型/空文档无内容可分类
+        }
+        const res = await runGeneration(activeCfg, system, `文档《${t.filename}》内容：\n${chunks.join("\n").slice(0, 1800)}`);
+        const cat = parseCategory(res.text);
+        if (!cat) {
+          bad++;
+        } else {
+          ok++;
+          out.push({ docId: t.id, filename: t.filename, category: cat, reason: "" });
+        }
+      } catch (err) {
         bad++;
-        continue;
+        console.error("[classify] item failed", t.filename, err);
+      } finally {
+        done++;
+        classifyProgress.value = `${done}/${targets.length}`;
       }
-      out.push({ docId: targets[i].id, filename: targets[i].filename, category: cat, reason: "" });
-    } catch (err) {
-      bad++;
-      console.error("[classify] item failed", targets[i].filename, err);
     }
   }
+  await Promise.all(Array.from({ length: Math.min(CONC, targets.length) }, () => worker()));
   classifying.value = false;
   classifyProgress.value = "";
   if (out.length === 0) {
-    classifyError.value = `全部分类失败（${bad} 篇）— 检查模型档案/余额后重试`;
+    classifyError.value = `全部分类失败（${bad} 篇失败${skipped ? `，${skipped} 篇为图片型/空文档无内容` : ""}）— 检查模型档案/余额后重试`;
     return;
   }
   classifyItems.value = out;
   classifyEdits.value = {};
   for (const it of out) classifyEdits.value[it.category] = it.category;
   classifyOpen.value = true;
-  if (bad > 0) toast(`分类完成：${out.length} 篇成功，${bad} 篇失败（已跳过）`);
-  else toast(`分类完成：${out.length} 篇`);
+  const parts = [`分类完成：${out.length} 篇成功`];
+  if (bad > 0) parts.push(`${bad} 篇失败`);
+  if (skipped > 0) parts.push(`${skipped} 篇图片型/空文档跳过（OCR 二期可处理）`);
+  toast(parts.join("，") + (bad === 0 && skipped === 0 ? "。" : "。"));
 }
 
 /** 确认：按最终组名聚合 → 建组（不存在则新建）→ 批量移组 */
