@@ -227,6 +227,7 @@ const contentHitIds = ref<Set<number>>(new Set());
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 let searchSeq = 0; // 竞态守卫：快速改字时旧查询晚返回会覆盖新结果（「搜索不准」根因）
 const searchQ = computed(() => keyword.value.trim().toLowerCase());
+const searchFilter = ref<"all" | "title" | "content">("all"); // 搜索范围：全部 / 仅文件名命中 / 仅正文内容命中
 watch(keyword, (q) => {
   if (searchTimer) clearTimeout(searchTimer);
   contentHitIds.value = new Set(); // 立即清空旧命中，避免残留干扰（文件名命中同步显示）
@@ -242,7 +243,11 @@ watch(keyword, (q) => {
 const filtered = computed(() => {
   let list = docs.value;
   const q = searchQ.value;
-  if (q) list = list.filter((d) => d.filename.toLowerCase().includes(q) || contentHitIds.value.has(d.id));
+  if (q) {
+    if (searchFilter.value === "title") list = list.filter((d) => d.filename.toLowerCase().includes(q));
+    else if (searchFilter.value === "content") list = list.filter((d) => !d.filename.toLowerCase().includes(q) && contentHitIds.value.has(d.id));
+    else list = list.filter((d) => d.filename.toLowerCase().includes(q) || contentHitIds.value.has(d.id));
+  }
   if (groupFilter.value === "none") list = list.filter((d) => d.group_id === null);
   else if (typeof groupFilter.value === "number") list = list.filter((d) => d.group_id === groupFilter.value);
   const dir = sortDir.value;
@@ -641,6 +646,11 @@ function onDrop(e: DragEvent) {
       <div class="search">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>
         <input class="input" v-model="keyword" placeholder="搜索文件名与内容…" />
+        <div class="search-filter" :class="{ disabled: !searchQ }">
+          <button class="sf" :class="{ on: searchFilter === 'all' }" @click="searchFilter = 'all'">全部</button>
+          <button class="sf" :class="{ on: searchFilter === 'title' }" @click="searchFilter = 'title'">标题命中</button>
+          <button class="sf" :class="{ on: searchFilter === 'content' }" @click="searchFilter = 'content'">内容命中</button>
+        </div>
       </div>
       <select class="select" v-model="targetGroup" style="width:150px" title="导入时直接归入所选分组">
         <option value="">导入到：未分组</option>
@@ -734,7 +744,7 @@ function onDrop(e: DragEvent) {
       <!-- 智能分类确认中：隐藏下方文档列表，页面保持简洁（分类完自动恢复） -->
       <div v-if="!classifyOpen" class="scroll-limit">
         <table class="tbl">
-        <colgroup><col style="width:34px" /><col /><col /><col /><col /><col /><col style="width:150px" /></colgroup>
+        <colgroup><col style="width:34px" /><col style="width:30%" /><col style="width:90px" /><col style="width:100px" /><col style="width:150px" /><col /><col style="width:150px" /></colgroup>
         <thead><tr>
           <th><input type="checkbox" :checked="allChecked" :disabled="classifying" @change="toggleAll" /></th>
           <th class="sortable" :class="{ sorted: sortKey === 'filename' }" @click="setSort('filename')">文件名<span class="sort-arrow">{{ sortKey === 'filename' ? (sortDir === 1 ? '▲' : '▼') : '' }}</span></th>

@@ -148,6 +148,12 @@ input,select,textarea{font-family:inherit;color:inherit}
 .toolbar .search{flex:1;min-width:180px;position:relative}
 .toolbar .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:14px;height:14px;stroke:var(--text-faint);fill:none;stroke-width:1.8;stroke-linecap:round}
 .toolbar .search .input{padding-left:33px}
+.toolbar .search{flex-wrap:wrap}
+.toolbar .search .search-filter{display:flex;gap:4px;margin-left:8px;flex-shrink:0}
+.toolbar .search .search-filter.disabled{opacity:.45;pointer-events:none}
+.toolbar .search .sf{font-size:12px;padding:3px 10px;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .13s}
+.toolbar .search .sf:hover{border-color:var(--blue);color:var(--blue)}
+.toolbar .search .sf.on{background:var(--blue);border-color:var(--blue);color:#fff}
 table.tbl{width:100%;border-collapse:collapse;table-layout:fixed}
 table.tbl colgroup col:nth-child(1){width:34%}
 table.tbl colgroup col:nth-child(2){width:11%}
