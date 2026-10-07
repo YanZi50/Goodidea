@@ -37,6 +37,11 @@ const scopeLabel = computed(() => {
 // 增量分析基准（localStorage 记上次分析时刻；文档 created_at 晚于基准者视为新增）
 const LAST_AT_KEY = "goodidea.lastAnalysisAt.v1";
 const incrOnly = ref(false);
+// 分析取消：AbortController 中断流式/一次性生成
+const abortCtrl = ref<AbortController | null>(null);
+function cancelAnalysis() {
+  abortCtrl.value?.abort();
+}
 function lastAnalysisAt(): number {
   return Number(localStorage.getItem(LAST_AT_KEY) ?? "0") || 0;
 }
@@ -197,11 +202,15 @@ async function runAnalysis() {
   }
   const chunks = await listAllChunkContent(60, ids);
   if (chunks.length === 0) {
-    toast(scope.value !== "all" ? `${scopeLabel.value}没有可分析的内容` : "知识库为空 — 先在文档库导入文档");
+    // 区分三种空因，避免误导（单篇无内容 ≠ 知识库为空）
+    if (docScope.value !== null) toast("该文档没有可分析的内容（可能是图片型 docx 或空文件，OCR 二期支持）");
+    else if (scope.value !== "all") toast(`${scopeLabel.value}没有可分析的内容`);
+    else toast("知识库为空 — 先在文档库导入文档");
     return;
   }
   analyzing.value = true;
   result.value = "";
+  abortCtrl.value = new AbortController();
 
   const industry = await loadIndustryContext(); // 行业背景：设置页可配置（v6）
   const system = [
@@ -214,7 +223,7 @@ async function runAnalysis() {
   const prompt = `以下是知识库内容（范围：${scopeLabel.value}${incrOnly.value ? "（仅新增）" : ""}，截取前 60 块）：\n\n${chunks.join("\n---\n")}`;
 
   try {
-    const res = await runGeneration(cfg, system, prompt);
+    const res = await runGeneration(cfg, system, prompt, abortCtrl.value?.signal);
     result.value = res.text;
     const cost = calcCost(cfg.model, res.usage);
     addCost(cfg.model, cost.amount);
@@ -235,10 +244,17 @@ async function runAnalysis() {
     if (historyOpen.value) await loadHistory(); // 历史面板开着时实时跟进
     toast(`分析完成 · ${lastMeta.value.cost}${incrOnly.value ? "（增量基准已更新）" : ""}`);
   } catch (err) {
-    toast(`分析失败：${err instanceof Error ? err.message : String(err)}`);
+    // 用户主动取消：不算失败，静默提示
+    const msg = err instanceof Error ? err.message : String(err);
+    if (abortCtrl.value?.signal.aborted || msg.includes("abort") || msg.includes("AbortError")) {
+      toast("已取消分析");
+    } else {
+      toast(`分析失败：${msg}`);
+    }
   } finally {
     analyzing.value = false;
     incrOnly.value = false;
+    abortCtrl.value = null;
   }
 }
 
@@ -309,7 +325,10 @@ function histTime(iso: string): string {
         </span>
         <span v-if="groups.length === 0 && docScope === null" style="color:var(--text-faint);font-size:12px">暂无分组 — 到文档库新建分组并移入文档后可聚焦分析</span>
       </div>
-      <div v-if="analyzing" style="color:var(--text-faint);font-size:13px;padding:10px 0">正在分析{{ scopeLabel }}（约 30–90 秒）…</div>
+      <div v-if="analyzing" style="display:flex;align-items:center;gap:10px;padding:10px 0;color:var(--text-faint);font-size:13px">
+        <span>正在分析{{ scopeLabel }}（约 30–90 秒）…</span>
+        <button class="btn btn-ghost btn-sm danger" @click="cancelAnalysis">取消分析</button>
+      </div>
       <div v-else-if="result" class="scroll-limit"><div ref="mdBox" class="md-render" v-html="renderedResult"></div></div>
       <div v-else style="color:var(--text-faint);font-size:13px;padding:10px 0">选择范围后点击「开始分析」：浓缩核心要点 + 指出问题（矛盾 / 缺口 / 低质段落 / 建议）。</div>
       <div v-if="lastMeta" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">

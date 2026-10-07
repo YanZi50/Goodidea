@@ -102,20 +102,26 @@ function thinkingOptions(cfg: AIConfig): { reasoningEffort?: "none" | "high" } {
   return { reasoningEffort: cfg.thinking ? "high" : "none" };
 }
 
-/** 一次性生成（全库分析用） */
-export async function runGeneration(cfg: AIConfig, system: string, prompt: string) {
+/** 一次性生成（全库分析用）；signal 用于用户主动取消（AbortController） */
+export async function runGeneration(cfg: AIConfig, system: string, prompt: string, signal?: AbortSignal) {
   const model = providerFor(cfg);
-  const res = await generateText({ model, system, prompt, providerOptions: { openai: thinkingOptions(cfg) } });
+  const res = await generateText({
+    model,
+    system,
+    prompt,
+    providerOptions: { openai: thinkingOptions(cfg) },
+    abortSignal: signal,
+  });
   return {
     text: res.text,
     usage: res.usage,
   };
 }
 
-/** 流式生成（工作台用）：返回 streamText 结果，调用方消费 textStream */
-export async function streamGeneration(cfg: AIConfig, system: string, prompt: string) {
+/** 流式生成（工作台用）：返回 streamText 结果，调用方消费 textStream；signal 可中断 */
+export async function streamGeneration(cfg: AIConfig, system: string, prompt: string, signal?: AbortSignal) {
   const model = providerFor(cfg);
-  return streamText({ model, system, prompt, providerOptions: { openai: thinkingOptions(cfg) } });
+  return streamText({ model, system, prompt, providerOptions: { openai: thinkingOptions(cfg) }, abortSignal: signal });
 }
 
 /** 测试模型连通性：发一条最小请求（≤5 token），返回真实结果与延迟。
