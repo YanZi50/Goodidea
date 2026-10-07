@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, inject } from "vue";
+import { ref, computed, onMounted, onUnmounted, inject } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SOURCES, fetchHotlist, type HotItem } from "../lib/hotlist";
 import { isTauriRuntime, loadHotKeywords } from "../lib/db";
-import { emitUseHotspot } from "../lib/bus";
+import { onDataChanged, emitUseHotspot } from "../lib/bus";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -15,6 +15,7 @@ const error = ref("");
 const lastUpdated = ref("");
 const onlyRelated = ref(false);
 const manual = ref("");
+let offDataChanged: (() => void) | null = null;
 
 const shownList = computed(() => (onlyRelated.value ? hotList.value.filter((h) => h.related) : hotList.value));
 
@@ -79,7 +80,16 @@ function useFirstForGenerate() {
   useForGenerate(list[0]);
 }
 
-onMounted(() => load());
+onMounted(() => {
+  offDataChanged = onDataChanged(() => {
+    // 设置页保存关键词库/行业背景后即时重载——热点高亮与新关键词同步生效，无需手动刷新
+    load(activeTab.value);
+  });
+  load();
+});
+onUnmounted(() => {
+  if (offDataChanged) offDataChanged();
+});
 </script>
 
 <template>
