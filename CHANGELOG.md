@@ -295,3 +295,7 @@
 - **分析过程可取消**：「分析中」提示旁新增「取消分析」按钮（AbortController 中断请求），取消不算失败、静默提示「已取消分析」；ai.ts runGeneration/streamGeneration 支持传入 AbortSignal（@a986315）
 - **单篇空内容提示修正**：选中单篇但该文档无分块时，此前因 scope 仍为「全部」误报「知识库为空」；现按三种原因精准提示——单篇无内容（图片型 docx/空文件，OCR 二期支持）/ 分组无内容 / 知识库为空（@a986315）
 - 验证：vue-tsc + vite build 全绿（409 模块）（@a986315）
+
+### Changed（Skill 模板跨页实时联动，按用户反馈）
+- **Skill 模板实时广播**：设置页新增/编辑/删除风格模板后 emitDataChanged，生成工作台监听同一总线即时重载——不再需要手动刷新（@0598c7e）
+- 验证：vue-tsc + vite build 全绿（409 模块）（@0598c7e）
