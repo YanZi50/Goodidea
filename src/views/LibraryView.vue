@@ -509,9 +509,10 @@ function onDrop(e: DragEvent) {
         <button class="chip" :class="{ on: groupFilter === 'all' }" @click="groupFilter = 'all'">全部 {{ docs.length }}</button>
         <button class="chip" :class="{ on: groupFilter === 'none' }" @click="groupFilter = 'none'">未分组 {{ ungroupedCount }}</button>
         <span v-for="g in groups" :key="g.id" class="g-chip-wrap">
-          <!-- 确认删除态：chip 本体原位变红字（不挤布局、不被裁剪）；× 入口仅在普通态显示 -->
-          <button class="chip g-chip" :class="{ on: groupFilter === g.id, deleting: groupDelId === g.id }" @click="groupDelId === g.id ? removeGroup(g) : (groupFilter = g.id)">{{ groupDelId === g.id ? "确认删除？" : `${g.name} ${g.doc_count}` }}</button>
-          <button v-if="groupDelId !== g.id" class="g-del" title="删除分组（组内文档移回未分组）" @click.stop="removeGroup(g)">×</button>
+          <!-- chip 本体始终原样（宽度不变零跳动）；确认删除时叠加等宽覆盖层（同宽同高，红框不伸长） -->
+          <button class="chip g-chip" :class="{ on: groupFilter === g.id }" @click="groupFilter = g.id">{{ g.name }} {{ g.doc_count }}</button>
+          <button v-if="groupDelId === g.id" class="chip g-chip-deleting" title="再次点击确认删除（组内文档移回未分组）" @click.stop="removeGroup(g)">确认删除？</button>
+          <button v-else class="g-del" title="删除分组（组内文档移回未分组）" @click.stop="removeGroup(g)">×</button>
         </span>
         <button class="btn btn-ghost btn-sm" @click="creatingGroup = true">+ 新建组</button>
       </div>
@@ -695,9 +696,14 @@ function onDrop(e: DragEvent) {
   color: var(--red); font-size: 12px; cursor: pointer; padding: 0; text-align: center; z-index: 2; font-weight: 700;
 }
 .g-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
-.chip.deleting {
-  background: rgba(244, 67, 54, 0.12); border-color: var(--red);
-  color: var(--red); font-weight: 700;
+/* 确认删除覆盖层：absolute 铺满原 chip（同宽同高），红框不伸长、布局零跳动 */
+.g-chip-deleting {
+  position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3;
+  border-radius: 999px; border: 1px solid var(--red);
+  background: rgba(244, 67, 54, 0.12); color: var(--red); font-weight: 700;
+  font-size: 12px; text-align: center; line-height: 1; padding: 0 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
 }
 .g-new-input { width: 140px; padding: 5px 10px; }
 .paste-panel {
