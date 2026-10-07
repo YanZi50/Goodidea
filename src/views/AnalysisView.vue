@@ -300,6 +300,43 @@ async function delHistory(h: HistoryRow) {
   await deleteHistory(h.id);
   await loadHistory();
 }
+
+// ---- 分析结果导出/复制（与生成工作台对齐） ----
+/** 复制为纯文本（取渲染后 innerText，去掉 Markdown 符号） */
+async function copyResult() {
+  const el = mdBox.value;
+  const text = (el?.innerText ?? result.value).trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(`已复制结果（${text.length} 字）`);
+  } catch {
+    toast("复制失败 — 请手动选择文本复制");
+  }
+}
+
+/** 导出为 .md 文件（保留 Markdown 结构）；Tauri 环境用保存对话框 */
+async function exportResult() {
+  if (!isTauriRuntime()) {
+    toast("导出需在桌面应用内使用");
+    return;
+  }
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const { invoke } = await import("@tauri-apps/api/core");
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const path = await save({
+    title: "导出分析结果",
+    defaultPath: `goodidea-分析-${stamp}.md`,
+    filters: [{ name: "Markdown", extensions: ["md"] }],
+  });
+  if (!path) return;
+  try {
+    await invoke("save_backup", { path, content: result.value }); // save_backup 即通用写文件命令
+    toast(`已导出：${path.split(/[\\/]/).pop()}`);
+  } catch (err) {
+    toast(`导出失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 function histTime(iso: string): string {
   return new Date(iso).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
@@ -342,6 +379,10 @@ function histTime(iso: string): string {
         </button>
         <button class="btn btn-ghost" :disabled="analyzing || docScope !== null" title="只分析上次分析后新入库的文档" @click="runIncremental">仅分析新增</button>
         <button class="btn btn-ghost" @click="toggleHistory">{{ historyOpen ? "收起历史" : "历史记录" }}</button>
+        <template v-if="result && !analyzing">
+          <button class="btn btn-ghost" @click="copyResult" title="复制为纯文本（不含 Markdown 符号）">复制结果</button>
+          <button class="btn btn-ghost" @click="exportResult" title="导出为 .md 文件（保留结构）">导出 .md</button>
+        </template>
       </div>
       <div v-if="historyOpen" class="hist-panel">
         <div v-if="histories.length === 0" style="font-size:13px;color:var(--text-faint);padding:8px 0">暂无分析历史 — 完成一次分析后自动记录</div>
