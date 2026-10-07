@@ -115,6 +115,11 @@ onUnmounted(() => {
     <div v-if="loading" style="color:var(--text-faint);font-size:13px;padding:12px 0">正在加载 {{ sources.find((s) => s.id === activeTab)?.label }}…</div>
 
     <template v-else>
+      <div class="hot-meta">
+        <span>共 <b>{{ hotList.length }}</b> 条<template v-if="onlyRelated"> · 行业相关 <b>{{ shownList.length }}</b> 条</template></span>
+        <span v-if="lastUpdated">更新于 {{ lastUpdated }}</span>
+        <span class="hot-meta-src">数据来源：60s 热榜聚合（主源，备：vvhan）· 点击条目打开原文</span>
+      </div>
       <div class="scroll-limit">
         <div v-for="h in shownList" :key="h.rank + '-' + h.title" class="hot-item" :class="{ clickable: h.url }" @click="open(h)">
           <div class="hot-rank" :class="{ top: h.rank >= 1 && h.rank <= 3 }">{{ h.rank }}</div>
@@ -124,12 +129,10 @@ onUnmounted(() => {
               <span class="up">▲</span>
               <span v-if="h.related" class="tag" style="background:var(--accent);color:#0b0e13">行业相关</span>
               <span v-if="h.hit">{{ h.hit }}</span>
-              <span v-if="lastUpdated">更新于 {{ lastUpdated }}</span>
             </div>
           </div>
-          <div class="hot-val">
+          <div class="hot-val" :title="'热度 ' + h.hot">
             <div class="hv">{{ h.hot }}</div>
-            <div class="hl">热度</div>
           </div>
           <button class="icon-btn hot-gen" title="接入生成工作台" @click.stop="useForGenerate(h)">
             <svg viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
@@ -139,7 +142,6 @@ onUnmounted(() => {
           {{ onlyRelated ? "当前榜单暂无行业相关条目 — 试试其他榜单或取消筛选" : "暂无数据" }}
         </div>
       </div>
-      <div style="color:var(--text-faint);font-size:12px;margin-top:6px">数据来源：60s 热榜聚合（主源，备：vvhan）· 点击条目在浏览器打开原文 · 实时刷新</div>
     </template>
 
     <div class="manual-input">
