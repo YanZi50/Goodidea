@@ -69,6 +69,47 @@ export async function loadIndustryContext(): Promise<string> {
   return v && v.trim() ? v : DEFAULT_INDUSTRY_CONTEXT;
 }
 
+// ---- 关键词库（app_settings，按行存储）：关联素材关键词 / 行业热点关键词，用户可自定义 ----
+/** 默认关联素材关键词（奢侈品回收行业旧值；设置页可整体替换，生成工作台实时同步） */
+export const DEFAULT_MATERIAL_KEYWORDS = ["价格表 v3", "名表回收话术", "包袋验货要点", "风格库·强节奏口播"];
+/** 默认行业热点关键词（奢侈品回收行业旧值；设置页可整体替换，热点高亮实时同步） */
+export const DEFAULT_HOT_KEYWORDS = [
+  "名表", "手表", "腕表", "劳力士", "爱马仕", "香奈儿", "LV", "路易威登",
+  "古驰", "宝格丽", "卡地亚", "包袋", "包包", "奢侈品", "二手", "回收",
+  "典当", "闲置", "成色", "鉴定", "公价", "专柜", "铂金包", "老花",
+];
+
+/** 解析按行存储的关键词（去空行、去首尾空格） */
+function parseKeywordText(v: string | null): string[] {
+  if (!v || !v.trim()) return [];
+  return v
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** 读取关联素材关键词：未配置或空 → 内置默认 */
+export async function loadMaterialKeywords(): Promise<string[]> {
+  const v = await getAppSetting("material_keywords");
+  return parseKeywordText(v).length > 0 ? parseKeywordText(v) : [...DEFAULT_MATERIAL_KEYWORDS];
+}
+
+/** 读取行业热点关键词：未配置或空 → 内置默认 */
+export async function loadHotKeywords(): Promise<string[]> {
+  const v = await getAppSetting("hot_keywords");
+  return parseKeywordText(v).length > 0 ? parseKeywordText(v) : [...DEFAULT_HOT_KEYWORDS];
+}
+
+/** 保存关联素材关键词（按行存储） */
+export async function saveMaterialKeywords(list: string[]): Promise<void> {
+  await setAppSetting("material_keywords", list.map((s) => s.trim()).filter(Boolean).join("\n"));
+}
+
+/** 保存行业热点关键词（按行存储） */
+export async function saveHotKeywords(list: string[]): Promise<void> {
+  await setAppSetting("hot_keywords", list.map((s) => s.trim()).filter(Boolean).join("\n"));
+}
+
 // ---- 风格模板（skills，v7）：名称 + 指令全文，生成时注入 system（用户可增删改） ----
 export interface SkillRow {
   id: number;

@@ -16,6 +16,10 @@ import {
   isTauriRuntime,
   loadIndustryContext,
   setAppSetting,
+  loadMaterialKeywords,
+  saveMaterialKeywords,
+  loadHotKeywords,
+  saveHotKeywords,
   listSkills,
   createSkill,
   updateSkill,
@@ -44,6 +48,28 @@ async function resetIndustry() {
   await setAppSetting("industry_context", "");
   toast("已恢复默认行业背景");
 }
+
+// ---- 关键词库（app_settings）：关联素材关键词 / 行业热点关键词，每行一个，保存后广播实时同步 ----
+const materialKw = ref("");
+const hotKw = ref("");
+
+async function loadKeywordLibs() {
+  const m = await loadMaterialKeywords();
+  materialKw.value = m.join("\n");
+  const h = await loadHotKeywords();
+  hotKw.value = h.join("\n");
+}
+
+async function saveKeywordLibs() {
+  await saveMaterialKeywords(materialKw.value.split("\n"));
+  await saveHotKeywords(hotKw.value.split("\n"));
+  kwSaved.value = true;
+  setTimeout(() => (kwSaved.value = false), 2000);
+  emitDataChanged(); // 生成工作台素材 chips / 实时热点高亮即时生效（不手动刷新）
+  toast("关键词库已保存，生成工作台与实时热点已同步");
+}
+
+const kwSaved = ref(false);
 
 // ---- 风格模板（skills，v7）：名称 + 指令全文，生成时注入 ----
 const skills = ref<SkillRow[]>([]);
@@ -118,6 +144,7 @@ onMounted(async () => {
   await loadProfiles();
   await loadIndustry();
   await loadSkills();
+  await loadKeywordLibs();
   offModelSwitched = onModelSwitched(() => {
     // 顶栏切换模型后即时刷新，无需手动刷新
     void loadProfiles();
@@ -518,6 +545,27 @@ async function priceSave() {
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-primary btn-sm" @click="skillStartNew">+ 新增模板</button>
         <span style="font-size:12px;color:var(--text-faint);align-self:center">删除后生成工作台 chips 同步消失；草稿/历史里的旧名自动忽略</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">关键词库 <span class="hint">每行一个 · 保存后全局实时生效</span></div>
+      <div style="color:var(--text-muted);font-size:13.5px;margin-bottom:10px">
+        「关联素材」是生成工作台按关键词在文档库检索素材的取数通道；「行业热点」用于实时热点页/热点参考中把行业相关条目橙色高亮。
+        改关键词即可适配任何行业（如餐饮：话术模板、菜单卖点、爆款菜）。
+      </div>
+      <div class="field" style="margin:0">
+        <label class="label">关联素材关键词</label>
+        <textarea class="textarea" v-model="materialKw" rows="4" placeholder="每行一个关键词，如：&#10;价格表 v3&#10;名表回收话术"></textarea>
+      </div>
+      <div class="field" style="margin:10px 0 0">
+        <label class="label">行业热点关键词</label>
+        <textarea class="textarea" v-model="hotKw" rows="4" placeholder="每行一个关键词，命中热榜标题即橙色高亮"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+        <button class="btn btn-primary btn-sm" @click="saveKeywordLibs">保存关键词库</button>
+        <span v-if="kwSaved" class="tag green" style="font-size:11px">已保存</span>
+        <span style="font-size:12px;color:var(--text-faint)">清空则回退内置默认词表</span>
       </div>
     </div>
 

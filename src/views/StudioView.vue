@@ -10,7 +10,7 @@ import {
 } from "../lib/ai";
 import { onUseHotspot, onDataChanged } from "../lib/bus";
 import { SOURCES, fetchHotlist, type HotItem } from "../lib/hotlist";
-import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, listSkills, listGroups, fetchGroupChunks, type SkillRow, type GroupRow, type HistoryRow } from "../lib/db";
+import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, listSkills, listGroups, fetchGroupChunks, loadMaterialKeywords, loadHotKeywords, type SkillRow, type GroupRow, type HistoryRow } from "../lib/db";
 import { checkDuplicates, type DupHit } from "../lib/similarity";
 import { validateOutput, type ValCheck } from "../lib/validate";
 
@@ -19,14 +19,21 @@ const toast = inject("toast") as (msg: string) => void;
 const skillList = ref<SkillRow[]>([]); // 风格模板（db skills，v7）：名称+指令全文，可自定义
 const groupList = ref<GroupRow[]>([]); // 文档库分组（引用分组注入素材）
 const activeGroups = ref(new Set<number>()); // 选中的分组 id
-const materialChips = ["价格表 v3", "名表回收话术", "包袋验货要点", "风格库·强节奏口播"];
+const materialChips = ref<string[]>([]); // 关联素材关键词（db app_settings，设置页可自定义，实时同步）
 const hotSource = ref("douyinHot"); // 热榜平台（实时）
 const hotItems = ref<HotItem[]>([]); // 实时热榜条目
 const hotLoading = ref(false);
 const hotError = ref("");
 const activeSkills = ref(new Set<string>());
-const activeMats = ref(new Set(["价格表 v3"]));
+const activeMats = ref(new Set<string>());
 const activeHot = ref("不使用热点"); // 选中热点（默认不用；热点页「接入生成」会置为 # 主题）
+
+/** 加载关联素材关键词（设置页可自定义；同步清理失效选中项） */
+async function loadMaterials() {
+  materialChips.value = await loadMaterialKeywords();
+  const valid = new Set(materialChips.value);
+  activeMats.value = new Set([...activeMats.value].filter((k) => valid.has(k)));
+}
 
 /** 加载风格模板（首次播种内置 4 个；过滤已删除的旧选中名，避免草稿/历史回填报错） */
 async function loadSkills() {
@@ -50,12 +57,13 @@ function toggleGroup(id: number) {
   activeGroups.value = s;
 }
 
-/** 拉取实时热榜（当前平台 Top 12；行业相关条目带标记） */
+/** 拉取实时热榜（当前平台 Top 12；行业相关条目带标记，关键词来自设置页可配置） */
 async function loadHot() {
   hotLoading.value = true;
   hotError.value = "";
   try {
-    const items = await fetchHotlist(hotSource.value);
+    const keywords = await loadHotKeywords();
+    const items = await fetchHotlist(hotSource.value, keywords);
     hotItems.value = items.slice(0, 12);
     // 之前选中的热点不在新列表且不是自定义/不使用 → 回退「不使用热点」
     if (
@@ -209,11 +217,13 @@ function restoreDraft() {
 onMounted(() => {
   void loadSkills();
   void loadGroups();
+  void loadMaterials();
   void loadHot();
-  // 设置页/文档库变更后实时同步（Skill 模板 + 素材分组同一广播，无需手动刷新）
+  // 设置页/文档库变更后实时同步（Skill 模板 + 素材关键词 + 引用分组同一广播，无需手动刷新）
   const offData = onDataChanged(() => {
     void loadSkills();
     void loadGroups();
+    void loadMaterials();
   });
   onUnmounted(offData);
   // 热点页「接入生成」→ 设置热点参考并预填需求（需求为空时）
@@ -473,9 +483,10 @@ function copyShots() {
         </div>
       </div>
       <div class="field">
-        <label class="label">关联素材</label>
-        <div class="chips">
-          <button v-for="c in materialChips" :key="c" class="chip" :class="{ on: activeMats.has(c) }" @click="toggleChip(activeMats, c)">{{ c }}</button>
+        <label class="label">关联素材 <span class="hint" style="font-weight:400;color:var(--text-faint)">按关键词在文档库检索真实内容注入</span></label>
+        <div class="chips chips-scroll">
+          <button v-for="c in materialChips" :key="c" class="chip chip-scroll-item" :class="{ on: activeMats.has(c) }" @click="toggleChip(activeMats, c)">{{ c }}</button>
+          <span v-if="materialChips.length === 0" style="font-size:12px;color:var(--text-faint);align-self:center">暂无关键词 — 到「设置 → 关联素材关键词」添加（每行一个）</span>
         </div>
       </div>
       <div class="field">

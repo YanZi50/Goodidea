@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, inject } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { SOURCES, fetchHotlist, type HotItem } from "../lib/hotlist";
-import { isTauriRuntime } from "../lib/db";
+import { isTauriRuntime, loadHotKeywords } from "../lib/db";
 import { emitUseHotspot } from "../lib/bus";
 
 const toast = inject("toast") as (msg: string) => void;
@@ -22,7 +22,8 @@ async function load(source = activeTab.value) {
   loading.value = true;
   error.value = "";
   try {
-    hotList.value = await fetchHotlist(source);
+    const keywords = await loadHotKeywords(); // 行业关键词来自设置页可配置
+    hotList.value = await fetchHotlist(source, keywords);
     lastUpdated.value = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
