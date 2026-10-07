@@ -51,3 +51,15 @@ export function onModelSwitched(h: Handler): () => void {
 export function emitModelSwitched(): void {
   for (const h of [...modelHandlers]) h();
 }
+
+// ---- 消耗统计变更（生成/分析计费后 → 消耗统计页实时刷新，无需手动刷新） ----
+const costHandlers = new Set<Handler>();
+
+export function onCostChanged(h: Handler): () => void {
+  costHandlers.add(h);
+  return () => costHandlers.delete(h);
+}
+
+export function emitCostChanged(): void {
+  for (const h of [...costHandlers]) h();
+}

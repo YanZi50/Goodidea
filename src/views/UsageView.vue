@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, inject } from "vue";
+import { ref, onMounted, onUnmounted, inject } from "vue";
 import { todayCost, costByModel, costHistory, priceFor, clearCosts, removeModelCost } from "../lib/ai";
+import { onCostChanged } from "../lib/bus";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -33,7 +34,15 @@ function refresh() {
     });
 }
 
-onMounted(refresh);
+onMounted(() => {
+  refresh();
+  // 生成/分析计费后实时刷新消耗统计（无需手动刷新）
+  offCost = onCostChanged(refresh);
+});
+
+onUnmounted(() => offCost?.());
+
+let offCost: (() => void) | undefined;
 
 /** 清空全部消耗记录（当日/近7日/近30日/按模型），二次确认 */
 function clearAll() {

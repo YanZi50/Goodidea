@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted, inject } from "
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { listDocuments, countChunks, listAllChunkContent, listGroups, recordHistory, listHistories, deleteHistory, isTauriRuntime, loadIndustryContext, loadAnalysisChunkLimit, type HistoryRow } from "../lib/db";
-import { onDataChanged, onAnalyzeDocRequest } from "../lib/bus";
+import { onDataChanged, onAnalyzeDocRequest, emitCostChanged } from "../lib/bus";
 import {
   loadActiveConfig,
   runGeneration,
@@ -230,6 +230,7 @@ async function runAnalysis() {
     result.value = res.text;
     const cost = calcCost(cfg.model, res.usage);
     addCost(cfg.model, cost.amount);
+    emitCostChanged();
     today.value = todayCost();
     lastMeta.value = {
       tokens: `${cost.inputTokens.toLocaleString()} in / ${cost.outputTokens.toLocaleString()} out`,

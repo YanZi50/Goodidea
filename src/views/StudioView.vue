@@ -8,7 +8,7 @@ import {
   calcCost,
   addCost,
 } from "../lib/ai";
-import { onUseHotspot, onDataChanged } from "../lib/bus";
+import { onUseHotspot, onDataChanged, emitCostChanged } from "../lib/bus";
 import { SOURCES, fetchHotlist, type HotItem } from "../lib/hotlist";
 import { isTauriRuntime, searchMaterialChunks, recordHistory, listHistories, deleteHistory, listChunksWithDoc, loadIndustryContext, listSkills, listGroups, fetchGroupChunks, loadMaterialKeywords, loadHotKeywords, type SkillRow, type GroupRow, type HistoryRow } from "../lib/db";
 import { checkDuplicates, type DupHit } from "../lib/similarity";
@@ -142,10 +142,11 @@ async function runDupCheck() {
   try {
     const chunks = await listChunksWithDoc(3000);
     const histories = await listHistories(80);
+    const out = output.value.trim();
     const candidates = [
       ...(chunks ?? []).map((c) => ({ source: c.doc, kind: "doc" as const, content: c.content })),
       ...(histories ?? [])
-        .filter((h) => h.kind === "generation")
+        .filter((h) => h.kind === "generation" && h.output?.trim() !== out) // 排除本次刚生成入库的自身（逐字相同必为自身）
         .map((h) => ({ source: h.title, kind: "history" as const, content: h.output })),
     ];
     dupHits.value = checkDuplicates(output.value, candidates);
@@ -365,6 +366,7 @@ async function generate() {
       }
       const cost = calcCost(cfg.model, await usage);
       addCost(cfg.model, cost.amount);
+      emitCostChanged();
       return {
         text,
         meta: {
