@@ -21,6 +21,22 @@ fn read_backup(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// 还原前自动快照：写当前库 JSON 到应用数据目录 goodidea-snapshots/，带时间戳；
+/// 还原失败或反悔时可手动从该目录恢复（无弹窗，静默留档）
+#[tauri::command]
+fn save_snapshot(app: tauri::AppHandle, content: String) -> Result<String, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法定位应用数据目录: {e}"))?
+        .join("goodidea-snapshots");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建快照目录失败: {e}"))?;
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+    let path = dir.join(format!("goodidea-snapshot-{stamp}.json"));
+    std::fs::write(&path, content).map_err(|e| format!("写入快照失败: {e}"))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 // ---- 备份还原（Rust 单连接事务，规避 tauri-plugin-sql 连接池下跨语句事务失效 BUG-014） ----
 #[derive(Deserialize)]
 struct BackupDoc {
@@ -271,7 +287,7 @@ pub fn run() {
                 .add_migrations("sqlite:goodidea.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![greet, save_backup, read_backup, import_backup])
+        .invoke_handler(tauri::generate_handler![greet, save_backup, read_backup, import_backup, save_snapshot])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -6,6 +6,7 @@ import {
   dbStatus,
   listBillingRules,
   upsertBillingRule,
+  exportBackupData,
   listProfiles,
   createProfile,
   updateProfile,
@@ -236,6 +237,16 @@ async function restoreBackup() {
       return;
     }
     restoring.value = true;
+    // 还原前自动快照当前库（写应用数据目录 goodidea-snapshots/），还原失败或反悔可找回；快照失败不阻断还原
+    try {
+      const snap = await exportBackupData();
+      if (snap) {
+        const snapPath = await invoke<string>("save_snapshot", { content: JSON.stringify(snap, null, 2) });
+        toast(`已自动备份当前库快照：${snapPath.split(/[\\/]/).pop()}`);
+      }
+    } catch (e) {
+      console.warn("[restore] snapshot skipped", e);
+    }
     const r = await importBackupData(data);
     if (!r) {
       toast("还原失败（数据库未响应，请重试）");
