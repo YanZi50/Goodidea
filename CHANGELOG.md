@@ -286,3 +286,7 @@
 ### Changed（文档库 UX 八轮，按用户反馈）
 - **删除角标红 ×**：分组 chip 右上角 × 角标改为红字红描边浅红底（更明显），hover 红底白字；确认态 chip 原位红字「确认删除？」（@afcc8ac）
 - 验证：vue-tsc + vite build 全绿（409 模块）（@afcc8ac）
+
+### Changed（文档库 UX 九轮，按用户反馈）
+- **删除确认红框与原 chip 等宽**：确认删除态由「chip 内容替换变宽」改为「absolute 覆盖层铺满原 chip 原位」——红框宽度与原分组 chip 完全一致，不伸长、布局零跳动（@0db1a80）
+- 验证：vue-tsc + vite build 全绿（409 模块）（@0db1a80）
