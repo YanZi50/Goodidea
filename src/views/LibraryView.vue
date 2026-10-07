@@ -129,13 +129,32 @@ function groupName(id: number | null): string {
   return groups.value.find((g) => g.id === id)?.name ?? "未分组";
 }
 
+// ---- 列表排序：点击表头切换（文件名/类型/大小/入库时间），默认按入库时间倒序（最新在前） ----
+const sortKey = ref<"filename" | "file_type" | "size" | "created_at">("created_at");
+const sortDir = ref<1 | -1>(-1);
+
+function setSort(k: "filename" | "file_type" | "size" | "created_at") {
+  if (sortKey.value === k) sortDir.value = (sortDir.value === 1 ? -1 : 1);
+  else {
+    sortKey.value = k;
+    sortDir.value = 1;
+  }
+}
+
 const filtered = computed(() => {
   let list = docs.value;
   const q = keyword.value.trim().toLowerCase();
   if (q) list = list.filter((d) => d.filename.toLowerCase().includes(q));
   if (groupFilter.value === "none") list = list.filter((d) => d.group_id === null);
   else if (typeof groupFilter.value === "number") list = list.filter((d) => d.group_id === groupFilter.value);
-  return list;
+  const dir = sortDir.value;
+  return [...list].sort((a, b) => {
+    let c = 0;
+    if (sortKey.value === "size") c = (a.size ?? 0) - (b.size ?? 0);
+    else if (sortKey.value === "created_at") c = a.created_at.localeCompare(b.created_at);
+    else c = a[sortKey.value].localeCompare(b[sortKey.value], "zh-Hans-CN", { numeric: true });
+    return c * dir;
+  });
 });
 
 const allChecked = computed(() => filtered.value.length > 0 && filtered.value.every((d) => selected.value.has(d.id)));
@@ -585,7 +604,11 @@ function onDrop(e: DragEvent) {
         <colgroup><col style="width:34px" /><col /><col /><col /><col /><col /><col style="width:150px" /></colgroup>
         <thead><tr>
           <th><input type="checkbox" :checked="allChecked" :disabled="classifying" @change="toggleAll" /></th>
-          <th>文件名</th><th>类型</th><th>大小</th><th>入库时间</th><th>分组</th><th style="text-align:right">操作</th>
+          <th class="sortable" :class="{ sorted: sortKey === 'filename' }" @click="setSort('filename')">文件名<span class="sort-arrow">{{ sortKey === 'filename' ? (sortDir === 1 ? '▲' : '▼') : '' }}</span></th>
+          <th class="sortable" :class="{ sorted: sortKey === 'file_type' }" @click="setSort('file_type')">类型<span class="sort-arrow">{{ sortKey === 'file_type' ? (sortDir === 1 ? '▲' : '▼') : '' }}</span></th>
+          <th class="sortable" :class="{ sorted: sortKey === 'size' }" @click="setSort('size')">大小<span class="sort-arrow">{{ sortKey === 'size' ? (sortDir === 1 ? '▲' : '▼') : '' }}</span></th>
+          <th class="sortable" :class="{ sorted: sortKey === 'created_at' }" @click="setSort('created_at')">入库时间<span class="sort-arrow">{{ sortKey === 'created_at' ? (sortDir === 1 ? '▲' : '▼') : '' }}</span></th>
+          <th>分组</th><th style="text-align:right">操作</th>
         </tr></thead>
         <tbody>
           <tr v-for="d in filtered" :key="d.id" :class="{ sel: selected.has(d.id) }">
@@ -761,6 +784,11 @@ tr.sel td { background: rgba(232, 179, 106, 0.06); }
   padding: 9px 12px 13px;
   border-bottom: 2px solid var(--border-strong);
 }
+/* 表头排序：可点击 + 当前排序列高亮 + 箭头 */
+.scroll-limit thead th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.scroll-limit thead th.sortable:hover { color: var(--accent); }
+.scroll-limit thead th.sorted { color: var(--accent); }
+.sort-arrow { font-size: 10px; margin-left: 3px; color: var(--accent); }
 /* 智能分类确认面板限高滚动：不撑爆页面，滚动查看 */
 .classify-panel { max-height: 360px; overflow-y: auto; }
 </style>
