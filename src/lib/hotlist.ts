@@ -72,12 +72,17 @@ export async function fetchHotlist(source: string, keywords: string[] = DEFAULT_
   } catch (err) {
     // 兜底 vvhan（原主源；网络恢复时自动可用）
     if (ep.vvhan) {
-      const res = await fetcher(`https://api.vvhan.com/api/hotlist/${ep.vvhan}`);
-      if (!res.ok) throw new Error(`热榜接口 ${res.status}`);
-      const json = (await res.json()) as { success?: boolean; code?: number; data?: Array<Record<string, unknown>> };
-      const list = json.data ?? [];
-      if (!Array.isArray(list) || list.length === 0) throw new Error("热榜数据为空");
-      return normalize(list, keywords);
+      try {
+        const res = await fetcher(`https://api.vvhan.com/api/hotlist/${ep.vvhan}`);
+        if (!res.ok) throw new Error(`热榜接口 ${res.status}`);
+        const json = (await res.json()) as { success?: boolean; code?: number; data?: Array<Record<string, unknown>> };
+        const list = json.data ?? [];
+        if (!Array.isArray(list) || list.length === 0) throw new Error("热榜数据为空");
+        return normalize(list, keywords);
+      } catch {
+        // 主源与备用源均失败：把底层网络错误（reqwest/浏览器）收敛为友好提示，不向用户展示 URL 等技术细节
+        throw new Error("热榜接口暂不可用（主源与备用源均请求失败），请检查网络后点「刷新」，或手动添加话题兜底");
+      }
     }
     throw err instanceof Error ? err : new Error(String(err));
   }
