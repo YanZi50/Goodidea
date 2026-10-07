@@ -211,6 +211,16 @@
 - **根治**：三个函数全部改为 `INSERT ... RETURNING id`（同语句原子返回真实 id，SQLite 3.35+ / bundled 均支持）——连接池下不再依赖连接级 last_insert_rowid 状态。
 - **数据复修**：62 篇 group_id=0 已归回未分组，87 篇全可见（未删文档）。
 
+## BUG-018：45 篇 docx 零文本块导致无法分类/分析——误判为"图片型"，实为历史坏数据，需删后重导
+
+- **日期**：2026-10-07
+- **关联 commit**：@7595f25（文案去误导）/@51efc82（消耗修复同批走查）
+- **所属模块**：数据完整性 / 导入链路（documents + chunks）与提示文案（LibraryView 分类跳过 / AnalysisView 空内容）
+- **症状**：用户「未分组」45 篇 docx 无法智能分类/分析（覆盖文本 0）；此前的诊断误判为"图片型脚本"（基于零 chunk + 文件体积小），引导用户走 OCR 视觉模型——实际这批文件**全部是正常文本 docx、无内嵌图片**（解包验证：media 图片数 0，文本 0.2K–19 万字符，mammoth 能正常提取 4K+ 字符）。
+- **根因**：① 数据层——45 篇 documents 记录存在但 chunks 表无任何块（零 chunk），file_hash 各异（非空文本 hash），属**历史遗留坏数据**（入库时文本提取异常或早期备份还原带入），文件本身完好；② 判断链——此前仅以"零 chunk + 小体积"推断图片型，未解包验证，结论被数据形态误导；③ 产品文案随之错误引导到 OCR。mammoth 1.13 双入口确认：**Node 入口（lib/unzip.js）只认 path|buffer|file，浏览器入口（browser/unzip.js，vite 构建自动映射）只认 arrayBuffer**——dist 产物中 openZip 为 `e.arrayBuffer?…:reject`，证明产品运行时 `{ arrayBuffer }` 用法正确、导入链路无 bug（Node 下直接测 mammoth 会误报，属环境差异非产品缺陷）。
+- **解决**：① 文案修正——「图片型/空文档」改为「无文本块（删除后重新导入可恢复；若文件本身是图片型才用 OCR）」，避免误导（AnalysisView 空内容 toast、LibraryView 分类跳过/失败提示、代码注释）；② 数据解锁——用户在文档库删除这 45 篇记录后重新导入同名文件即可恢复 chunk（导入链路本身正常，重新导入 hash 为真实文本 hash，不会命中旧坏 hash 判重）；OCR 仅用于真正图片型（截图/扫描件）。
+- **预防**：① 判定"无内容"必须**解包验证文件本体**（zipfile 查 word/media/ 与 <w:t> 文本），禁止仅凭 chunk 数为 0 + 体积推断文档形态；② 导入链路改动后需在**构建产物**（dist）验证 mammoth 入口分支（browser vs Node），Node 环境直测 mammoth 不代表产品行为；③ 提示文案不得臆断文档形态，写"无文本块"这类可观察事实而非"图片型"这类推测。代码注释已标注（ingest.ts readFileText 双入口说明）。
+
 ## 记录约定
 
 - 新 Bug 出现时：**先记录、再修复**（记录时间、症状、当时的 commit），修复后补根因与预防。
