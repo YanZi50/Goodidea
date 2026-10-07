@@ -21,6 +21,7 @@ import { ingestFile, ingestText } from "../lib/ingest";
 import { emitDataChanged, emitAnalyzeDocRequest, onDataChanged } from "../lib/bus";
 import { loadActiveConfig, runGeneration, ocrImage } from "../lib/ai";
 import { getAppSetting, getProfileById, findDocumentByFilename, replaceDocumentChunks } from "../lib/db";
+import LimitSelect from "../components/LimitSelect.vue";
 
 const toast = inject("toast") as (msg: string) => void;
 
@@ -121,6 +122,8 @@ const editName = ref(""); // 行内重命名（与移组同面板，一次保存
 const selected = ref<Set<number>>(new Set());
 const batchGroup = ref<number | "">("");
 const targetGroup = ref<number | "">(""); // 导入时归属组
+/** 分组下拉选项（LimitSelect 用，选项超 5 条自动折叠+滑块） */
+const groupOptions = computed(() => groups.value.map((g) => ({ value: g.id, label: g.name })));
 const groupDelId = ref<number | null>(null); // 删除分组二次确认态
 
 // ---- 粘贴文本入库 ----
@@ -654,10 +657,7 @@ function onDrop(e: DragEvent) {
           <button class="sf" :class="{ on: searchFilter === 'content' }" @click="searchFilter = 'content'">内容命中</button>
         </div>
       </div>
-      <select class="select" v-model="targetGroup" style="width:150px" title="导入时直接归入所选分组">
-        <option value="">导入到：未分组</option>
-        <option v-for="g in groups" :key="g.id" :value="g.id">导入到：{{ g.name }}</option>
-      </select>
+      <LimitSelect v-model="targetGroup" :options="groupOptions" placeholder="导入到：未分组" :width="150" title="导入时直接归入所选分组" />
       <button class="btn btn-ghost" @click="openPaste">粘贴文本</button>
       <button class="btn btn-ghost" :disabled="ocrRunning" @click="runOcr" title="选择图片型 docx（截图/扫描件），用设置中的 OCR 视觉模型识别文字并写入知识库">
         <svg viewBox="0 0 24 24"><path d="M4 7V4h3" /><path d="M20 7V4h-3" /><path d="M4 17v3h3" /><path d="M20 17v3h-3" /><rect x="7" y="9" width="10" height="7" rx="1" /></svg>{{ ocrRunning ? ocrProgress : "OCR 图片型" }}
@@ -708,10 +708,7 @@ function onDrop(e: DragEvent) {
       <!-- 第二行：常驻移组控件（始终显示同一结构，勾选前后零跳动） -->
       <div class="tbl-bar-tags">
         <span class="tag-editor-label">移入分组：</span>
-        <select class="select" v-model="batchGroup" :disabled="selected.size === 0 || classifying" style="width:160px">
-          <option value="">选择目标分组…</option>
-          <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
-        </select>
+        <LimitSelect v-model="batchGroup" :options="groupOptions" placeholder="选择目标分组…" :disabled="selected.size === 0 || classifying" :width="160" />
         <button class="btn btn-primary btn-sm" :disabled="selected.size === 0 || classifying" @click="applyBatchGroup">应用</button>
         <span class="tag-editor-label" style="color:var(--text-faint)">{{ selected.size === 0 ? "勾选文档后可批量操作" : `已选 ${selected.size} 篇` }}</span>
       </div>
@@ -794,10 +791,7 @@ function onDrop(e: DragEvent) {
                 <span class="tag-editor-label">文件名：</span>
                 <input class="input" v-model="editName" style="width:220px" placeholder="重命名（回车保存）" @keydown.enter="saveEditor(filtered.find((d) => d.id === editingId)!)" />
                 <span class="tag-editor-label">归属组：</span>
-                <select class="select" v-model="editGroupId" style="width:160px">
-                  <option value="">未分组</option>
-                  <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
-                </select>
+                <LimitSelect v-model="editGroupId" :options="groupOptions" placeholder="未分组" :width="160" />
                 <button class="btn btn-primary btn-sm" @click="saveEditor(filtered.find((d) => d.id === editingId)!)">保存</button>
                 <button class="btn btn-ghost btn-sm" @click="editingId = null">取消</button>
               </div>
@@ -843,7 +837,7 @@ function onDrop(e: DragEvent) {
 
 <style scoped>
 /* 组导航外层容器：创建分组悬浮面板的定位锚点；上边距加大（离搜索栏远几个像素） */
-.group-nav-wrap { position: relative; margin: 16px 0 14px; }
+.group-nav-wrap { position: relative; margin: 16px 0 22px; }
 .group-nav { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
 /* 创建分组悬浮面板：absolute 不占 flow，导航布局零跳动；面板覆盖下方内容可接受（带底色阴影） */
 .g-create-panel {

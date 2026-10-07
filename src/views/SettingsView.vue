@@ -524,7 +524,7 @@ async function priceSave() {
         内置 4 个可修改/删除，也可新增自己的模板（如「3C 数码测评」「家居好物种草」）。
       </div>
 
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:260px;overflow-y:auto;padding-right:4px" class="skill-scroll">
         <div v-for="s in skills" :key="s.id" class="profile-card" style="padding:10px 12px">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <b style="font-size:13.5px">{{ s.name }}</b>
@@ -655,6 +655,10 @@ async function priceSave() {
 </template>
 
 <style scoped>
+.skill-scroll::-webkit-scrollbar { width: 8px; }
+.skill-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+.skill-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+.skill-scroll::-webkit-scrollbar-track { background: transparent; }
 .profile-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .profile-card {
   border: 1px solid var(--border);
