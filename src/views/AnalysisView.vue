@@ -206,7 +206,7 @@ async function runAnalysis() {
   const chunks = await listAllChunkContent(analysisLimit.value, ids);
   if (chunks.length === 0) {
     // 区分三种空因，避免误导（单篇无内容 ≠ 知识库为空）
-    if (docScope.value !== null) toast("该文档没有可分析的内容（可能是图片型 docx 或空文件，OCR 二期支持）");
+    if (docScope.value !== null) toast("该文档没有可分析的内容（可能是图片型 docx 或空文件）— 图片型可到文档库选中后点「OCR 图片型」提取文字");
     else if (scope.value !== "all") toast(`${scopeLabel.value}没有可分析的内容`);
     else toast("知识库为空 — 先在文档库导入文档");
     return;
