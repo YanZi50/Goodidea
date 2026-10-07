@@ -205,6 +205,16 @@ table.tbl tr:hover .row-actions{opacity:1}
 .chip{padding:6px 13px;border-radius:20px;font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;transition:all .14s}
 .chip:hover{border-color:var(--border-strong);color:var(--text)}
 .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+/* 热点参考：限高 5 条 + 竖滑块；条目带序号徽标，行业相关橙色（rel） */
+.hot-scroll{display:flex;flex-direction:column;gap:8px;max-height:190px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
+.hot-scroll::-webkit-scrollbar{width:7px}
+.hot-scroll::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.hot-scroll::-webkit-scrollbar-thumb:hover{background:var(--text-faint)}
+.hot-scroll::-webkit-scrollbar-track{background:transparent}
+.hot-chip{display:flex;align-items:center;gap:8px;width:100%;justify-content:flex-start;text-align:left;padding:6px 12px}
+.hot-rank{flex-shrink:0;min-width:20px;height:20px;line-height:20px;text-align:center;border-radius:6px;background:rgba(128,128,128,.14);font-size:11px;font-weight:700;color:var(--text-faint)}
+.hot-chip.rel .hot-rank{background:var(--accent-soft);color:var(--accent)}
+.hot-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .out-area{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;min-height:420px;max-height:calc(100vh - 340px);overflow-y:auto;overscroll-behavior:contain;position:relative}
 .out-area .cursor{display:inline-block;width:2px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:0}}

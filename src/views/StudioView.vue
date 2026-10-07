@@ -505,17 +505,22 @@ function copyShots() {
           </select>
           <button class="btn btn-ghost btn-sm" @click="loadHot" :disabled="hotLoading">{{ hotLoading ? "刷新中…" : "刷新" }}</button>
           <span style="font-size:12px;color:var(--text-faint)">点选条目作为参考注入生成</span>
+          <span v-if="hotItems.length > 0" style="margin-left:auto;font-size:11.5px;color:var(--text-faint)">共 {{ hotItems.length }} 条 · 列表内滚动查看更多</span>
         </div>
-        <div class="chips">
-          <button v-for="it in hotItems" :key="it.rank + it.title" class="chip" :class="{ on: activeHot === it.title, rel: it.related }" @click="activeHot = it.title" :title="`热度 ${it.hot}${it.related ? ' · 行业相关' : ''}`">{{ it.title }}</button>
+        <div class="hot-scroll">
+          <button v-for="it in hotItems" :key="it.rank + it.title" class="chip hot-chip" :class="{ on: activeHot === it.title, rel: it.related }" @click="activeHot = it.title" :title="`热度 ${it.hot}${it.related ? ' · 行业相关' : ''}`">
+            <span class="hot-rank">{{ it.rank }}</span>
+            <span class="hot-title">{{ it.title }}</span>
+          </button>
+          <div v-if="hotItems.length === 0 && !hotLoading" style="font-size:12px;color:var(--text-faint);padding:4px 2px">
+            <template v-if="hotError">热榜拉取失败：{{ hotError }}（请检查网络后刷新）</template>
+            <template v-else>暂无热榜数据</template>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
           <button class="chip" :class="{ on: activeHot === '不使用热点' }" @click="activeHot = '不使用热点'">不使用热点</button>
-          <button v-if="activeHot.startsWith('# ') && !hotItems.some((i) => i.title === activeHot.slice(2))" class="chip on" :title="activeHot" @click="activeHot = '不使用热点'">{{ activeHot }} ×</button>
-        </div>
-        <div style="font-size:12px;margin-top:4px" :style="{ color: hotError ? 'var(--red)' : 'var(--text-faint)' }">
-          <template v-if="hotLoading">正在拉取热榜…</template>
-          <template v-else-if="hotError">热榜拉取失败：{{ hotError }}（请检查网络后刷新）</template>
-          <template v-else-if="hotItems.length === 0">暂无热榜数据</template>
-          <template v-else>行业相关条目自动高亮标记；热点页点条目「生成」图标也可直接接入此处</template>
+          <button v-if="activeHot && activeHot !== '不使用热点' && !hotItems.some((i) => i.title === activeHot)" class="chip on" :title="activeHot" @click="activeHot = '不使用热点'">{{ activeHot }} ×</button>
+          <span style="font-size:12px;color:var(--text-faint)">行业相关条目自动高亮标记；热点页点条目「生成」图标也可直接接入此处</span>
         </div>
       </div>
       <div class="field">
