@@ -413,3 +413,7 @@
 - **消耗统计恒 ¥0.00 根因修复**：billing_rules 空表返回空对象覆盖内置常量价格表 → 所有模型单价 0；空表时回退内置价格表（deepseek-v4-flash in¥1/out¥2 等），历史旧数据 cost 仍为 0 属已写入的旧值，新生成即正确（@51efc82）
 - 备注：用户环境 45 篇未分组 docx 均为图片型（零 chunk），需配置 OCR 视觉模型后逐个解锁；当前 ocr_profile_id 未配置、gpt-5.5 档案未激活且余额不足（外部因素）（@51efc82）
 - 验证：vue-tsc + vite build 全绿（409 模块）（@51efc82）
+
+### Chore（桌面分发包）
+- **打包配置调整**：bundle targets `all` → `["app"]`，产出绿色版 exe（10.3MB，免安装双击即用，zip 4.8MB）；MSI/NSIS 安装包因 GitHub 下载 WiX 超时受阻（tauri CLI 无条件下载 WiX，本地预置工具不识别），待网络可通后切回 targets 重打（@待回填）
+- 验证：`npm run tauri build` EXIT=0，release exe 已产出并压缩为 Goodidea-桌面版-v0.1.0.zip（@待回填）
