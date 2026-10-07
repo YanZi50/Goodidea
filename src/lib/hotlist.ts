@@ -1,5 +1,6 @@
 // 实时热点数据层：多源热榜 API 封装 + 行业关键词标记（关键词来自设置页可配置，默认奢侈品回收词表）
-// 主源：60s.viki.moe（免费开源 60s-api，本机网络实测可达）；备源：vvhan（DNS 在本机网络不可达，保留兜底）
+// 主源：60s.viki.moe（免费开源 60s-api，实测本机可达但部分平台偶发超时）；
+// 镜像：官方「公共实例列表」实测可达的两个实例（同协议同格式）；兜底：vvhan（DNS 本机不可达，保留网络恢复后自动可用）
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { isTauriRuntime, DEFAULT_HOT_KEYWORDS } from "./db";
 
@@ -21,7 +22,11 @@ export const SOURCES = [
   { id: "toutiaoHot", label: "头条热榜" },
 ];
 
-/** 平台 → 各源 API 端点（60s 主源；vvhan 兜底） */
+/** 60s 协议源（主源 + 镜像，响应格式一致：{code:200,data:[{title,hot_value,link}]}） */
+const S60_PRIMARY = "https://60s.viki.moe";
+const S60_MIRRORS = ["https://api.cczo.cc/60s", "https://60s.mizhoubaobei.top"];
+
+/** 平台 → 各源 API 端点（60s 主源 → 镜像 → vvhan 兜底） */
 const SOURCE_ENDPOINTS: Record<string, { s60: string; vvhan?: string }> = {
   douyinHot: { s60: "douyin", vvhan: "douyinHot" },
   weiboHot: { s60: "weibo", vvhan: "weiboHot" },
@@ -55,35 +60,44 @@ function normalize(items: Array<Record<string, unknown>>, keywords: string[]): H
     });
 }
 
-/** 抓取指定源热榜：60s 主源 → vvhan 兜底；Tauri 走插件 fetch 绕过 CORS，预览环境原生 fetch；
+/** 抓取指定源热榜：60s 主源 → 60s 镜像（多级） → vvhan 兜底；Tauri 走插件 fetch 绕过 CORS，预览环境原生 fetch；
  *  keywords 行业关键词（设置页可配），用于命中高亮 */
 export async function fetchHotlist(source: string, keywords: string[] = DEFAULT_HOT_KEYWORDS): Promise<HotItem[]> {
   const ep = SOURCE_ENDPOINTS[source];
   if (!ep) throw new Error(`未知热榜源 ${source}`);
   const fetcher = (url: string) => (isTauriRuntime() ? tauriFetch(url) : fetch(url));
 
-  // 主源 60s
-  try {
-    const res = await fetcher(`https://60s.viki.moe/v2/${ep.s60}`);
-    if (!res.ok) throw new Error(`60s 热榜 ${res.status}`);
+  // 60s 协议：主源 + 镜像逐个尝试（同格式，normalize 复用）
+  const tryS60 = async (base: string) => {
+    const res = await fetcher(`${base}/v2/${ep.s60}`);
+    if (!res.ok) throw new Error(`热榜接口 ${res.status}`);
     const json = (await res.json()) as { code?: number; data?: Array<Record<string, unknown>> };
-    if (json.code !== 200 || !Array.isArray(json.data) || json.data.length === 0) throw new Error("60s 热榜数据为空");
+    if (json.code !== 200 || !Array.isArray(json.data) || json.data.length === 0) throw new Error("热榜数据为空");
     return normalize(json.data, keywords);
-  } catch (err) {
-    // 兜底 vvhan（原主源；网络恢复时自动可用）
-    if (ep.vvhan) {
-      try {
-        const res = await fetcher(`https://api.vvhan.com/api/hotlist/${ep.vvhan}`);
-        if (!res.ok) throw new Error(`热榜接口 ${res.status}`);
-        const json = (await res.json()) as { success?: boolean; code?: number; data?: Array<Record<string, unknown>> };
-        const list = json.data ?? [];
-        if (!Array.isArray(list) || list.length === 0) throw new Error("热榜数据为空");
-        return normalize(list, keywords);
-      } catch {
-        // 主源与备用源均失败：把底层网络错误（reqwest/浏览器）收敛为友好提示，不向用户展示 URL 等技术细节
-        throw new Error("热榜接口暂不可用（主源与备用源均请求失败），请检查网络后点「刷新」，或手动添加话题兜底");
-      }
+  };
+
+  let lastErr: unknown = null;
+  for (const base of [S60_PRIMARY, ...S60_MIRRORS]) {
+    try {
+      return await tryS60(base);
+    } catch (err) {
+      lastErr = err;
     }
-    throw err instanceof Error ? err : new Error(String(err));
   }
+
+  // 兜底 vvhan（格式不同但 normalize 兼容；网络恢复时自动可用）
+  if (ep.vvhan) {
+    try {
+      const res = await fetcher(`https://api.vvhan.com/api/hotlist/${ep.vvhan}`);
+      if (!res.ok) throw new Error(`热榜接口 ${res.status}`);
+      const json = (await res.json()) as { success?: boolean; code?: number; data?: Array<Record<string, unknown>> };
+      const list = json.data ?? [];
+      if (!Array.isArray(list) || list.length === 0) throw new Error("热榜数据为空");
+      return normalize(list, keywords);
+    } catch {
+      // 主源、镜像与备用源均失败：把底层网络错误（reqwest/浏览器）收敛为友好提示，不向用户展示 URL 等技术细节
+      throw new Error("热榜接口暂不可用（主源与备用源均请求失败），请检查网络后点「刷新」，或手动添加话题兜底");
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
