@@ -611,9 +611,11 @@ function onDrop(e: DragEvent) {
       @drop.prevent="onDrop"
       @click="fileInput?.click()"
     >
-      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M17 8l-5-5-5 5" /><path d="M12 3v12" /></svg>
-      <div>拖拽文件到这里，或 <b>点击选择文件</b></div>
-      <div class="fmt">支持 .txt · .md · .docx（一期）｜.pdf · 图片 OCR（二期）</div>
+      <div class="dz-main">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M17 8l-5-5-5 5" /><path d="M12 3v12" /></svg>
+        <span>拖拽文件到这里，或 <b>点击选择文件</b></span>
+      </div>
+      <div class="fmt">支持 .txt · .md · .docx｜图片型 docx 用「OCR 图片型」识别内容</div>
       <input
         ref="fileInput"
         type="file"
