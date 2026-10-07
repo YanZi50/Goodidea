@@ -37,6 +37,46 @@ fn save_snapshot(app: tauri::AppHandle, content: String) -> Result<String, Strin
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// 提取 docx 内嵌图片（word/media/*），返回 (mime, base64) 列表，供视觉模型 OCR；
+/// 图片型脚本（截图/扫描件转 docx）mammoth 提取不到文本，走此通道解锁内容
+#[tauri::command]
+fn extract_docx_images(path: String) -> Result<Vec<(String, String)>, String> {
+    let file = std::fs::File::open(&path).map_err(|e| format!("打开文件失败: {e}"))?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("不是有效的 docx（zip）: {e}"))?;
+    let mut out: Vec<(String, String)> = Vec::new();
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i).map_err(|e| format!("读取条目失败: {e}"))?;
+        let name = entry.name().to_string();
+        if !name.starts_with("word/media/") {
+            continue;
+        }
+        let lower = name.to_lowercase();
+        let mime = if lower.ends_with(".png") {
+            "image/png"
+        } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+            "image/jpeg"
+        } else if lower.ends_with(".gif") {
+            "image/gif"
+        } else if lower.ends_with(".bmp") {
+            "image/bmp"
+        } else if lower.ends_with(".webp") {
+            "image/webp"
+        } else {
+            continue;
+        };
+        let mut buf = Vec::new();
+        std::io::copy(&mut entry, &mut buf).map_err(|e| format!("读取图片失败: {e}"))?;
+        if buf.is_empty() || buf.len() > 12 * 1024 * 1024 {
+            continue; // 空或超大图跳过（IPC 体积限制）
+        }
+        out.push((mime.to_string(), base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &buf)));
+    }
+    if out.is_empty() {
+        return Err("该 docx 未找到内嵌图片（可能不是图片型文档）".into());
+    }
+    Ok(out)
+}
+
 // ---- 备份还原（Rust 单连接事务，规避 tauri-plugin-sql 连接池下跨语句事务失效 BUG-014） ----
 #[derive(Deserialize)]
 struct BackupDoc {
@@ -287,7 +327,7 @@ pub fn run() {
                 .add_migrations("sqlite:goodidea.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![greet, save_backup, read_backup, import_backup, save_snapshot])
+        .invoke_handler(tauri::generate_handler![greet, save_backup, read_backup, import_backup, save_snapshot, extract_docx_images])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

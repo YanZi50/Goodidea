@@ -368,6 +368,34 @@ export async function insertChunk(c: { doc_id: number; seq: number; content: str
   ]);
 }
 
+/** 按文件名精确查找文档（OCR 回写定位用；同名前缀（1）后缀等情况以精确匹配优先） */
+export async function findDocumentByFilename(filename: string): Promise<DocumentRow | null> {
+  const d = await getDb();
+  const rows = await d.select<DocumentRow[]>(
+    "SELECT id, filename, file_type, file_hash, size, tags, group_id, created_at FROM documents WHERE filename = $1 LIMIT 1",
+    [filename]
+  );
+  return rows[0] ?? null;
+}
+
+/** OCR 回写：清空该文档旧 chunks（原为空/占位），按新识别文本重建分块 */
+export async function replaceDocumentChunks(docId: number, text: string): Promise<number> {
+  const d = await getDb();
+  await d.execute("DELETE FROM chunks WHERE doc_id = $1", [docId]);
+  const chunks = text
+    .split(/\n{2,}/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (chunks.length === 0) {
+    await insertChunk({ doc_id: docId, seq: 1, content: text.trim() || "（OCR 未识别出文字）", token_count: Math.max(1, Math.round((text.length || 1) / 1.8)) });
+    return 1;
+  }
+  for (let i = 0; i < chunks.length; i++) {
+    await insertChunk({ doc_id: docId, seq: i + 1, content: chunks[i], token_count: Math.max(1, Math.round(chunks[i].length / 1.8)) });
+  }
+  return chunks.length;
+}
+
 /** 文档分块总数（可选按文档范围） */
 export async function countChunks(docIds?: number[]): Promise<number | null> {
   if (!isTauriRuntime()) return null;
@@ -670,6 +698,22 @@ export async function listProfiles(): Promise<AIProfile[] | null> {
     );
   } catch (err) {
     console.error("[db] listProfiles failed", err);
+    return null;
+  }
+}
+
+/** 按 id 取模型档案（OCR 视觉模型选择等） */
+export async function getProfileById(id: number): Promise<AIProfile | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    const d = await getDb();
+    const rows = await d.select<AIProfile[]>(
+      "SELECT id, label, base_url, model, api_key, thinking, is_active, created_at, updated_at FROM ai_profiles WHERE id = $1 LIMIT 1",
+      [id]
+    );
+    return rows[0] ?? null;
+  } catch (err) {
+    console.error("[db] getProfileById failed", err);
     return null;
   }
 }

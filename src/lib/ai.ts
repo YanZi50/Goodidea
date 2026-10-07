@@ -142,6 +142,49 @@ export async function testConnection(cfg: AIConfig): Promise<{ ok: boolean; late
   }
 }
 
+// ---------- OCR（图片型脚本解锁）：调用视觉模型 chat/completions 识别 docx 内嵌图片 ----------
+
+/**
+ * 识别单张图片中的文字（OpenAI 兼容 vision 格式；走 tauriFetch 绕过 CORS）。
+ * cfg 需为「支持视觉」的模型档案（设置页「OCR 模型」下拉选择）；返回原样识别文本。
+ */
+export async function ocrImage(cfg: AIConfig, imageBase64: string, mime: string): Promise<string> {
+  const url = cfg.baseURL.replace(/\/+$/, "") + "/chat/completions";
+  const body = {
+    model: cfg.model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "请识别这张图片中的所有文字，逐行原样输出，不要添加任何解释、评论或格式标记。若图片没有文字则只输出“（无文字）”。",
+          },
+          { type: "image_url", image_url: { url: `data:${mime};base64,${imageBase64}` } },
+        ],
+      },
+    ],
+    max_tokens: 4000,
+  };
+  const fetcher = isTauriRuntime() ? tauriFetch : fetch;
+  const res = await fetcher(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`OCR 请求失败（HTTP ${res.status}）${detail.slice(0, 120)}`);
+  }
+  const json = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+    error?: { message?: string };
+  };
+  if (json.error?.message) throw new Error(`OCR 失败：${json.error.message}`);
+  const text = (json.choices?.[0]?.message?.content ?? "").trim();
+  return text === "（无文字）" ? "" : text;
+}
+
 // ---------- 计费（默认常量价格表；设置页可维护，db 优先覆盖） ----------
 
 export const PRICE_TABLE: Record<string, { in: number; out: number }> = {

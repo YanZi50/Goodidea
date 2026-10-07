@@ -15,15 +15,93 @@ import {
   renameDocument,
   searchChunkDocIds,
   listAllChunkContent,
+  isTauriRuntime,
 } from "../lib/db";
 import { ingestFile, ingestText } from "../lib/ingest";
 import { emitDataChanged, emitAnalyzeDocRequest, onDataChanged } from "../lib/bus";
-import { loadActiveConfig, runGeneration } from "../lib/ai";
+import { loadActiveConfig, runGeneration, ocrImage } from "../lib/ai";
+import { getAppSetting, getProfileById, findDocumentByFilename, replaceDocumentChunks } from "../lib/db";
 
 const toast = inject("toast") as (msg: string) => void;
 
 const docs = ref<DocumentRow[]>([]);
 const totalChunks = ref(0);
+
+// ---- 图片型脚本 OCR（视觉模型解锁 0 chunk 文档） ----
+const ocrRunning = ref(false);
+const ocrProgress = ref("");
+
+async function runOcr() {
+  if (ocrRunning.value) return;
+  if (!isTauriRuntime()) {
+    toast("OCR 需在桌面应用内使用");
+    return;
+  }
+  const ocrIdRaw = await getAppSetting("ocr_profile_id");
+  const ocrId = ocrIdRaw && /^\d+$/.test(ocrIdRaw) ? Number(ocrIdRaw) : null;
+  const profile = ocrId ? await getProfileById(ocrId) : null;
+  if (!profile) {
+    toast("未配置 OCR 视觉模型 — 请到「设置 → 关键词库 → OCR 视觉模型」选择支持图片的模型档案");
+    return;
+  }
+  const cfg = {
+    label: profile.label,
+    baseURL: profile.base_url,
+    model: profile.model,
+    apiKey: profile.api_key,
+    thinking: profile.thinking === 1,
+  };
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const { invoke } = await import("@tauri-apps/api/core");
+  const paths = await open({
+    multiple: true,
+    title: "选择要识别的图片型 docx（可多选）",
+    filters: [{ name: "Word 文档", extensions: ["docx"] }],
+  });
+  if (!paths || paths.length === 0) return;
+  ocrRunning.value = true;
+  let done = 0;
+  let okFiles = 0;
+  try {
+    for (const p of paths) {
+      ocrProgress.value = `OCR ${done + 1}/${paths.length}：${p.split(/[\\/]/).pop()}`;
+      try {
+        const images = await invoke<[string, string][]>("extract_docx_images", { path: p });
+        const parts: string[] = [];
+        for (const [mime, b64] of images) {
+          const text = await ocrImage(cfg, b64, mime);
+          if (text.trim()) parts.push(text.trim());
+        }
+        const full = parts.join("\n\n");
+        if (!full.trim()) {
+          toast(`「${p.split(/[\\/]/).pop()}」未识别出文字（图片为空或模型不支持视觉）`);
+          done++;
+          continue;
+        }
+        const filename = p.split(/[\\/]/).pop() ?? "";
+        const doc = await findDocumentByFilename(filename);
+        if (!doc) {
+          toast(`「${filename}」不在文档库中（请先导入该文件再 OCR）`);
+          done++;
+          continue;
+        }
+        const n = await replaceDocumentChunks(doc.id, full);
+        okFiles++;
+        toast(`「${filename}」OCR 完成：${n} 块已入库`);
+      } catch (err) {
+        toast(`「${p.split(/[\\/]/).pop()}」OCR 失败：${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        done++;
+        ocrProgress.value = `OCR ${done}/${paths.length}`;
+      }
+    }
+    await refresh();
+    if (okFiles > 0) toast(`OCR 完成：${okFiles} 个文件已解锁内容（可分析/分类/检索）`);
+  } finally {
+    ocrRunning.value = false;
+    ocrProgress.value = "";
+  }
+}
 const loading = ref(true);
 const importing = ref(false);
 const progress = ref(""); // 导入进度 "i/N"
@@ -563,6 +641,9 @@ function onDrop(e: DragEvent) {
         <option v-for="g in groups" :key="g.id" :value="g.id">导入到：{{ g.name }}</option>
       </select>
       <button class="btn btn-ghost" @click="openPaste">粘贴文本</button>
+      <button class="btn btn-ghost" :disabled="ocrRunning" @click="runOcr" title="选择图片型 docx（截图/扫描件），用设置中的 OCR 视觉模型识别文字并写入知识库">
+        <svg viewBox="0 0 24 24"><path d="M4 7V4h3" /><path d="M20 7V4h-3" /><path d="M4 17v3h3" /><path d="M20 17v3h-3" /><rect x="7" y="9" width="10" height="7" rx="1" /></svg>{{ ocrRunning ? ocrProgress : "OCR 图片型" }}
+      </button>
       <button class="btn btn-primary" :disabled="importing" @click="fileInput?.click()">
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>{{ importing ? `导入中 ${progress}…` : "批量导入" }}
       </button>

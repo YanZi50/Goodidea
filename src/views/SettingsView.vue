@@ -17,6 +17,7 @@ import {
   isTauriRuntime,
   loadIndustryContext,
   setAppSetting,
+  getAppSetting,
   loadMaterialKeywords,
   saveMaterialKeywords,
   loadHotKeywords,
@@ -53,21 +54,25 @@ async function resetIndustry() {
 // ---- 关键词库（app_settings）：关联素材关键词 / 行业热点关键词，每行一个，保存后广播实时同步 ----
 const materialKw = ref("");
 const hotKw = ref("");
+const ocrProfileId = ref<number | "">(""); // OCR 视觉模型档案（app_settings ocr_profile_id）
 
 async function loadKeywordLibs() {
   const m = await loadMaterialKeywords();
   materialKw.value = m.join("\n");
   const h = await loadHotKeywords();
   hotKw.value = h.join("\n");
+  const ocrId = await getAppSetting("ocr_profile_id");
+  ocrProfileId.value = ocrId && /^\d+$/.test(ocrId) ? Number(ocrId) : "";
 }
 
 async function saveKeywordLibs() {
   await saveMaterialKeywords(materialKw.value.split("\n"));
   await saveHotKeywords(hotKw.value.split("\n"));
+  await setAppSetting("ocr_profile_id", ocrProfileId.value === "" ? "" : String(ocrProfileId.value));
   kwSaved.value = true;
   setTimeout(() => (kwSaved.value = false), 2000);
   emitDataChanged(); // 生成工作台素材 chips / 实时热点高亮即时生效（不手动刷新）
-  toast("关键词库已保存，生成工作台与实时热点已同步");
+  toast("关键词库与 OCR 模型已保存，生成工作台与实时热点已同步");
 }
 
 const kwSaved = ref(false);
@@ -572,6 +577,13 @@ async function priceSave() {
       <div class="field" style="margin:10px 0 0">
         <label class="label">行业热点关键词</label>
         <textarea class="textarea" v-model="hotKw" rows="4" placeholder="每行一个关键词，命中热榜标题即橙色高亮"></textarea>
+      </div>
+      <div class="field" style="margin:10px 0 0">
+        <label class="label">OCR 视觉模型 <span class="hint" style="font-weight:400;color:var(--text-faint)">用于识别图片型脚本（需支持图片输入的模型，如 gpt-4o / qwen-vl）</span></label>
+        <select class="select" v-model="ocrProfileId" style="width:240px">
+          <option value="">（未选择 — OCR 按钮将提示配置）</option>
+          <option v-for="p in profiles" :key="p.id" :value="p.id">{{ p.label }} · {{ p.model }}</option>
+        </select>
       </div>
       <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
         <button class="btn btn-primary btn-sm" @click="saveKeywordLibs">保存关键词库</button>
