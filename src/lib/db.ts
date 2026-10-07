@@ -254,7 +254,7 @@ export async function getDb(): Promise<Database> {
   return db;
 }
 
-/** 文档总数（P0 验证用） */
+/** 文档总数 */
 export async function countDocuments(): Promise<number | null> {
   if (!isTauriRuntime()) return null;
   try {

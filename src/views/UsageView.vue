@@ -86,7 +86,7 @@ const maxV = () => Math.max(...bar7.value.map((b) => b.v), 0.0001);
     </div>
     <div class="card">
       <div class="card-title">
-        按模型统计 <span class="hint">单价为常量价格表 · P2 迁入 billing_rules</span>
+        按模型统计 <span class="hint">单价为内置价格表</span>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" @click="clearAll">{{ confirmClear ? "确认清空？" : "清空记录" }}</button>
       </div>
       <div v-if="modelRows.length === 0" style="color:var(--text-faint);font-size:13px;padding:8px 0">

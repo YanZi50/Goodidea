@@ -476,7 +476,7 @@ function copyShots() {
 <template>
   <div class="studio">
     <div class="card">
-      <div class="panel-head"><span class="ph-t">生成配置</span><span class="ph-h">P1 · 真实流式生成</span></div>
+      <div class="panel-head"><span class="ph-t">生成配置</span><span class="ph-h">流式生成 · 实时渲染</span></div>
       <div class="field">
         <label class="label">Skill 模板</label>
         <div class="chips">

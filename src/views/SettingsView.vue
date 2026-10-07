@@ -620,7 +620,7 @@ async function priceSave() {
     </div>
 
     <div class="card" style="margin-bottom:14px">
-      <div class="card-title">数据存储 <span class="hint">SQLite · P0 已接入</span></div>
+      <div class="card-title">数据存储 <span class="hint">SQLite · 本机数据库</span></div>
       <div style="color:var(--text-muted);font-size:13.5px">
         本地单文件库 <code style="background:var(--surface-2);padding:1px 6px;border-radius:6px">goodidea.db</code>
         （AppConfig 目录）。表结构由 Rust 侧 Migration 版本化管理，前端只读写不做 DDL。
