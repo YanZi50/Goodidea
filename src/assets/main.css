@@ -263,6 +263,8 @@ table.tbl tr:hover .row-actions{opacity:1}
 /* ===== 通用滚动限制：长内容限高 + 右侧滚动条 ===== */
 .scroll-limit{max-height:460px;overflow-y:auto;overscroll-behavior:contain}
 .scroll-limit-sm{max-height:320px;overflow-y:auto;overscroll-behavior:contain}
+/* 实时热点：列表随视口撑高填满下方留白（上限 = 视口-顶部控件），条目少时留白融入卡片背景 */
+.hot-list-wrap{max-height:calc(100vh - 300px);min-height:300px;overflow-y:auto;overscroll-behavior:contain;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px}
 .scroll-limit::-webkit-scrollbar,.scroll-limit-sm::-webkit-scrollbar,.out-area::-webkit-scrollbar{width:8px}
 .scroll-limit::-webkit-scrollbar-thumb,.scroll-limit-sm::-webkit-scrollbar-thumb,.out-area::-webkit-scrollbar-thumb{background:#2a3340;border-radius:4px}
 .scroll-limit::-webkit-scrollbar-thumb:hover,.scroll-limit-sm::-webkit-scrollbar-thumb:hover,.out-area::-webkit-scrollbar-thumb:hover{background:#3a4656}

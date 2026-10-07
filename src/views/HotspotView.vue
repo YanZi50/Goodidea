@@ -120,7 +120,7 @@ onUnmounted(() => {
         <span v-if="lastUpdated">更新于 {{ lastUpdated }}</span>
         <span class="hot-meta-src">数据来源：60s 热榜聚合（主源，备：vvhan）· 点击条目打开原文</span>
       </div>
-      <div class="scroll-limit">
+      <div class="scroll-limit hot-list-wrap">
         <div v-for="h in shownList" :key="h.rank + '-' + h.title" class="hot-item" :class="{ clickable: h.url }" @click="open(h)">
           <div class="hot-rank" :class="{ top: h.rank >= 1 && h.rank <= 3 }">{{ h.rank }}</div>
           <div class="hot-body">
