@@ -471,7 +471,7 @@ async function startClassify() {
   const out: ClassifyItem[] = [];
   let ok = 0;
   let bad = 0;
-  let skipped = 0; // 无文本（图片型/空）文档：不浪费 token，直接跳过并在完成提示中说明
+  let skipped = 0; // 无文本块（提取失败/图片型/空）文档：不浪费 token，直接跳过并在完成提示中说明
   // 并发 3：逐篇串行太慢（87 篇约几分钟），并发显著提速；结果顺序不要求
   const CONC = 3;
   let cursor = 0;
@@ -508,7 +508,7 @@ async function startClassify() {
   classifying.value = false;
   classifyProgress.value = "";
   if (out.length === 0) {
-    classifyError.value = `全部分类失败（${bad} 篇失败${skipped ? `，${skipped} 篇为图片型/空文档无内容` : ""}）— 检查模型档案/余额后重试`;
+    classifyError.value = `全部分类失败（${bad} 篇失败${skipped ? `，${skipped} 篇无文本块跳过` : ""}）— 检查模型档案/余额后重试`;
     return;
   }
   classifyItems.value = out;
@@ -517,7 +517,7 @@ async function startClassify() {
   classifyOpen.value = true;
   const parts = [`分类完成：${out.length} 篇成功`];
   if (bad > 0) parts.push(`${bad} 篇失败`);
-  if (skipped > 0) parts.push(`${skipped} 篇图片型/空文档跳过（可到设置配置 OCR 视觉模型后，用「OCR 图片型」解锁）`);
+  if (skipped > 0) parts.push(`${skipped} 篇无文本块跳过（删除后重新导入可恢复；若为图片型 docx 则用「OCR 图片型」解锁）`);
   toast(parts.join("，") + (bad === 0 && skipped === 0 ? "。" : "。"));
 }
 
