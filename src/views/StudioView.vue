@@ -210,8 +210,11 @@ onMounted(() => {
   void loadSkills();
   void loadGroups();
   void loadHot();
-  // 设置页新增/编辑/删除 Skill 模板后实时同步（同文档库广播通道，无需手动刷新）
-  const offData = onDataChanged(() => void loadSkills());
+  // 设置页/文档库变更后实时同步（Skill 模板 + 素材分组同一广播，无需手动刷新）
+  const offData = onDataChanged(() => {
+    void loadSkills();
+    void loadGroups();
+  });
   onUnmounted(offData);
   // 热点页「接入生成」→ 设置热点参考并预填需求（需求为空时）
   const off = onUseHotspot((topic) => {
@@ -477,8 +480,8 @@ function copyShots() {
       </div>
       <div class="field">
         <label class="label">引用分组 <span class="hint" style="font-weight:400;color:var(--text-faint)">可选 · 整组内容作为学习上下文，贴合组内知识生成</span></label>
-        <div class="chips">
-          <button v-for="g in groupList" :key="g.id" class="chip" :class="{ on: activeGroups.has(g.id) }" @click="toggleGroup(g.id)" :title="`组内 ${g.doc_count} 篇文档`">{{ g.name }}<template v-if="g.doc_count > 0">（{{ g.doc_count }}）</template></button>
+        <div class="chips chips-scroll">
+          <button v-for="g in groupList" :key="g.id" class="chip chip-scroll-item" :class="{ on: activeGroups.has(g.id) }" @click="toggleGroup(g.id)" :title="`组内 ${g.doc_count} 篇文档`">{{ g.name }}<template v-if="g.doc_count > 0">（{{ g.doc_count }}）</template></button>
           <span v-if="groupList.length === 0" style="font-size:12px;color:var(--text-faint);align-self:center">暂无分组 — 先在文档库创建分组/导入脚本</span>
         </div>
         <div style="font-size:12px;color:var(--text-faint);margin-top:4px">与「关联素材」关键词检索可同时生效；组内容与需求一起注入，生成以组内事实为准</div>
