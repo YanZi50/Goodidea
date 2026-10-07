@@ -225,12 +225,17 @@ function setSort(k: "filename" | "file_type" | "size" | "created_at") {
 // 全文搜索：内容块命中集合（文件名匹配前端同步做，内容命中异步查）
 const contentHitIds = ref<Set<number>>(new Set());
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
+let searchSeq = 0; // 竞态守卫：快速改字时旧查询晚返回会覆盖新结果（「搜索不准」根因）
 watch(keyword, (q) => {
   if (searchTimer) clearTimeout(searchTimer);
+  contentHitIds.value = new Set(); // 立即清空旧命中，避免残留干扰（文件名命中同步显示）
+  const seq = ++searchSeq;
   searchTimer = setTimeout(async () => {
+    if (!q.trim()) return; // 空关键词无需查内容
     const ids = await searchChunkDocIds(q);
+    if (seq !== searchSeq) return; // 已有更新的查询，丢弃过期结果
     contentHitIds.value = new Set(ids);
-  }, 250);
+  }, 200);
 });
 
 const filtered = computed(() => {
