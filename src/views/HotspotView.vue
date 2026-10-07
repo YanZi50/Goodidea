@@ -16,22 +16,26 @@ const lastUpdated = ref("");
 const onlyRelated = ref(false);
 const manual = ref("");
 let offDataChanged: (() => void) | null = null;
+let autoTimer: ReturnType<typeof setInterval> | null = null;
+const AUTO_REFRESH_MS = 5 * 60 * 1000; // 热榜实时性：每 5 分钟静默自动刷新
 
 const shownList = computed(() => (onlyRelated.value ? hotList.value.filter((h) => h.related) : hotList.value));
 
-async function load(source = activeTab.value) {
-  loading.value = true;
-  error.value = "";
+async function load(source = activeTab.value, opts: { silent?: boolean } = {}) {
+  if (!opts.silent) loading.value = true;
+  if (!opts.silent) error.value = "";
   try {
     const keywords = await loadHotKeywords(); // 行业关键词来自设置页可配置
     hotList.value = await fetchHotlist(source, keywords);
-    lastUpdated.value = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    lastUpdated.value = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   } catch (e) {
+    // 静默自动刷新失败时保留旧列表，不打断用户浏览（手动刷新/切 tab 才展示错误）
+    if (opts.silent) return;
     error.value = e instanceof Error ? e.message : String(e);
     hotList.value = [];
     lastUpdated.value = "";
   } finally {
-    loading.value = false;
+    if (!opts.silent) loading.value = false;
   }
 }
 
@@ -57,10 +61,18 @@ function open(h: HotItem) {
 function addManual() {
   const text = manual.value.trim();
   if (!text) return;
-  const hit = text.includes("回收") || text.includes("二手") || text.includes("奢侈品") ? "手动" : "";
-  hotList.value = [{ rank: 0, title: text, hot: "手动", url: "", related: hit !== "", hit }, ...hotList.value];
+  hotList.value = [{ rank: 0, title: text, hot: "手动", url: "", related: true, hit: "手动" }, ...hotList.value];
   manual.value = "";
   toast("已加入热点列表");
+}
+
+/** 移除手动添加的话题（rank=0 标记） */
+function removeManual(h: HotItem) {
+  const i = hotList.value.indexOf(h);
+  if (i >= 0) {
+    hotList.value.splice(i, 1);
+    toast("已移除：" + h.title);
+  }
 }
 
 /** 接入生成：话题 → 生成工作台热点参考 */
@@ -86,9 +98,11 @@ onMounted(() => {
     load(activeTab.value);
   });
   load();
+  autoTimer = setInterval(() => load(activeTab.value, { silent: true }), AUTO_REFRESH_MS);
 });
 onUnmounted(() => {
   if (offDataChanged) offDataChanged();
+  if (autoTimer) clearInterval(autoTimer);
 });
 </script>
 
@@ -118,22 +132,24 @@ onUnmounted(() => {
       <div class="hot-meta">
         <span>共 <b>{{ hotList.length }}</b> 条<template v-if="onlyRelated"> · 行业相关 <b>{{ shownList.length }}</b> 条</template></span>
         <span v-if="lastUpdated">更新于 {{ lastUpdated }}</span>
-        <span class="hot-meta-src">数据来源：60s 热榜聚合（主源，备：vvhan）· 点击条目打开原文</span>
+        <span class="hot-meta-src">每 5 分钟自动刷新 · 数据来源：60s 热榜聚合（主源，备：vvhan）· 点击条目打开原文</span>
       </div>
       <div class="scroll-limit hot-list-wrap">
         <div v-for="h in shownList" :key="h.rank + '-' + h.title" class="hot-item" :class="{ clickable: h.url }" @click="open(h)">
-          <div class="hot-rank" :class="{ top: h.rank >= 1 && h.rank <= 3 }">{{ h.rank }}</div>
+          <div class="hot-rank" :class="{ top: h.rank >= 1 && h.rank <= 3, manual: h.rank === 0 }">{{ h.rank === 0 ? "手" : h.rank }}</div>
           <div class="hot-body">
             <div class="t">{{ h.title }}</div>
             <div class="s">
               <span class="up">▲</span>
-              <span v-if="h.related" class="tag" style="background:var(--accent);color:#0b0e13">行业相关</span>
-              <span v-if="h.hit">{{ h.hit }}</span>
+              <span v-if="h.related" class="tag" style="background:var(--accent);color:#0b0e13">{{ h.hit || "行业相关" }}</span>
             </div>
           </div>
           <div class="hot-val" :title="'热度 ' + h.hot">
             <div class="hv">{{ h.hot }}</div>
           </div>
+          <button v-if="h.rank === 0" class="icon-btn hot-del" title="移除该话题" @click.stop="removeManual(h)">
+            <svg viewBox="0 0 24 24"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+          </button>
           <button class="icon-btn hot-gen" title="接入生成工作台" @click.stop="useForGenerate(h)">
             <svg viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
           </button>
@@ -175,9 +191,15 @@ onUnmounted(() => {
 }
 .filter-toggle input { accent-color: var(--accent); }
 .hot-item { position: relative; }
+.hot-rank.manual { background: var(--accent-soft); color: var(--accent); }
 .hot-gen {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
   opacity: 0; transition: opacity .15s;
 }
-.hot-item:hover .hot-gen { opacity: 1; }
+.hot-del {
+  position: absolute; right: 38px; top: 50%; transform: translateY(-50%);
+  opacity: 0; transition: opacity .15s; color: var(--red);
+}
+.hot-item:hover .hot-gen, .hot-item:hover .hot-del { opacity: 1; }
+.hot-item .hot-val { padding-right: 26px; }
 </style>
